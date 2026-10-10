@@ -135,7 +135,7 @@ cymag_saas/
 │   ├── business.py           ← Tradução "técnico → negócio" (custo das falhas)
 │   ├── plans.py              ← Catálogo de planos e regras de entitlement
 │   └── severity.py           ← Modelo único de severidade e cálculo de risco
-├── scanner_go/               ← Port scanner opcional em Go (opcional; há fallback)
+├── scanner_go/               ← Scanner de portas em Go (opcional; há fallback em Python)
 ├── static/                   ← Front-end (SPA sem framework)
 │   ├── cymag.css             ← Design system (light/dark, responsivo)
 │   ├── cymag.js              ← SPA conectada a toda a API
