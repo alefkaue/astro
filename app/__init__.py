@@ -43,6 +43,8 @@ def create_app() -> Flask:
     # ── Banco e IA ────────────────────────────────────────────────────────────
     from app.features import init_app as init_features
     init_features(app)
+    from app.csrf import init_app as init_csrf
+    init_csrf(app)
     from app import db
     db.init_db()
 

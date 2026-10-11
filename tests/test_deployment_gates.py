@@ -3,6 +3,8 @@ from flask import Flask
 from app import features
 from app.ai.aegis import Aegis
 
+XRW = {"X-Requested-With": "test"}  # SEC-009a: POST sem corpo precisa do header anti-CSRF
+
 
 @pytest.mark.parametrize("environment", ["staging", "production", "unknown"])
 def test_hosted_gates_do_not_execute_handlers(monkeypatch, environment):
@@ -40,7 +42,7 @@ def test_simulated_billing_and_server_discovery_cannot_be_enabled_in_prod(monkey
     app = Flask(__name__)
     features.init_app(app)
     with app.test_client() as client:
-        assert client.post("/api/account/plan").status_code == 403
+        assert client.post("/api/account/plan", headers=XRW).status_code == 403
         assert client.get("/api/auto_discover").status_code == 404
 
 

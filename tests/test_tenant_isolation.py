@@ -21,6 +21,8 @@ import pytest
 
 from app import create_app, db
 
+XRW = {"X-Requested-With": "test"}  # SEC-009a: POST sem corpo precisa do header anti-CSRF
+
 
 @pytest.fixture(scope="module")
 def app_ctx():
@@ -133,7 +135,7 @@ def test_http_cannot_authorize_other_tenant_engagement(tenants):
     with app.test_client() as c:
         _login(c, "ownerA@a.com")
         # B começa autorizado no fixture; reautorizar via A deve dar 404 (não revela).
-        assert c.post(f"/api/engagements/{b['eng']}/authorize").status_code == 404
+        assert c.post(f"/api/engagements/{b['eng']}/authorize", headers=XRW).status_code == 404
 
 
 def test_http_scans_list_scoped(tenants):

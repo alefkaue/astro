@@ -22,7 +22,7 @@ function isDemo() { return !!(window.CYMAG_DEMO && window.CYMAG_DEMO.active); }
 
 async function api(path, { method = "GET", body = null } = {}) {
   if (isDemo()) return window.__demoApi(path, { method, body });
-  const opts = { method, headers: {} };
+  const opts = { method, headers: { "X-Requested-With": "ASTRO" } };  // SEC-009a: barreira CSRF
   if (body) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
   const r = await fetch(path, opts);
   if (r.status === 401) { if (state.user) { state.user = null; toast("Sessão expirada.", "err"); showLogin(); } throw new Error("unauthorized"); }
@@ -1286,7 +1286,7 @@ async function downloadPDF(kind) {
   const body = { scan_id: s.scan_id };
   if (kind === "detailed") body.instructions = "Relatório profissional de segurança.";
   try {
-    const r = await fetch("/api/report/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await fetch("/api/report/" + kind, { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "ASTRO" }, body: JSON.stringify(body) });
     if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.error || "Falha ao gerar PDF.", "err"); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);

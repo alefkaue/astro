@@ -96,3 +96,15 @@ Analise de produto/comercializacao concluida por Codex em COMMERCIAL_READINESS.m
 2026-10-11: Codex implementou gates de implantacao, bloqueio de billing simulado/discovery hospedados e bloqueio de rede do AEGIS desabilitado. 124 testes Python e 3 suites JS passaram. Claude shell sem resposta interrompido exit 1; tarefa pilot-security preparada para terminal autenticado. Ver PILOT_SECURITY.md.
 
 2026-10-11: Contencao defensiva implementada: redes especiais/IPv6 rejeitados, allow/deny, limite 64 sem truncamento, max_ips e refiltro de hosts. 139 testes passaram; nenhum scan externo. Parecer de Claude preservado.
+
+## SEC-009b (Codex) — rate limit de login
+
+Implementado limitador em memória com threading.Lock, janela deslizante por email normalizado e IP, limites configuráveis por ambiente (5/20 falhas em 900 segundos), bloqueio por uma janela completa, teto de 10000 chaves e descarte de entradas antigas/expiradas. Login bloqueado retorna 429 com Retry-After e auditoria; sucesso limpa apenas o email e emails inexistentes executam verificação contra hash dummy gerado uma vez. Adicionados 8 testes com reset automático, relógio injetável, banco temporário, expiração, equivalência de respostas, limite de memória e concorrência. Validação: .venv/Scripts/python.exe docs/agents/run_checks.py — 160 passed, 17 warnings (depreciações de PDF), em 20.73s; nenhuma falha por estado compartilhado. Estado do limitador é local a cada processo/worker.
+
+## SEC-009a (Claude) — barreira CSRF da API + revisão do SEC-009b
+
+- Novo `app/csrf.py` registrado no app factory: em POST/PUT/PATCH/DELETE sob `/api/`, recusa (403) origem divergente (`Origin`, ou `Referer` na falta dele; `null` nunca confiável; extras via `CYMAG_TRUSTED_ORIGINS`) e exige `application/json` ou header `X-Requested-With`. Fecha o vetor `<form enctype="text/plain">` que `get_json(force=True)` aceitava. SameSite=Lax segue como primeira barreira.
+- `static/cymag.js`: `api()` e download de PDF enviam `X-Requested-With: ASTRO`.
+- Testes: `tests/test_csrf.py` (13); 6 POSTs sem corpo em testes existentes passaram a enviar o header.
+- Revisão do SEC-009b (Codex): aprovado. Ressalvas registradas: bloqueio por email permite lockout temporário de uma conta por terceiros (trade-off padrão; considerar CAPTCHA/MFA depois); estado é por processo — com vários workers o limite efetivo multiplica; `_prune` é O(n) por login (ok até 10k chaves).
+- Suíte combinada: **160 passed**; 3 suites JS OK.

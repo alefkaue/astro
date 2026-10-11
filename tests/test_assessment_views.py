@@ -4,6 +4,8 @@ from app import db
 from app.assessment_views import assessment_views_bp
 from tests.test_dashboard import tenants
 
+XRW = {"X-Requested-With": "test"}  # SEC-009a: POST sem corpo precisa do header anti-CSRF
+
 
 def test_detail_is_authenticated_and_tenant_scoped(tenants):
     a, b, uid, sid = tenants
@@ -63,7 +65,7 @@ def test_viewer_cannot_create_scope_and_owner_can_authorize(tenants):
             session["uid"] = owner
         created = client.post("/api/engagements", json={"name":"Test", "scope":["192.0.2.1"]})
         assert created.status_code == 201
-        assert client.post(f"/api/engagements/{created.json['id']}/authorize").status_code == 200
+        assert client.post(f"/api/engagements/{created.json['id']}/authorize", headers=XRW).status_code == 200
 
 
 def test_scope_authorization_rejects_missing_or_foreign_tenant(tenants):
@@ -80,14 +82,14 @@ def test_scope_authorization_rejects_missing_or_foreign_tenant(tenants):
     with app.test_client() as client:
         with client.session_transaction() as session:
             session["uid"] = orphan
-        assert client.post(f"/api/engagements/{foreign}/authorize").status_code == 403
+        assert client.post(f"/api/engagements/{foreign}/authorize", headers=XRW).status_code == 403
         assert db.authorize_engagement(foreign, orphan) is False
         with client.session_transaction() as session:
             session["uid"] = owner
-        assert client.post(f"/api/engagements/{foreign}/authorize").status_code == 404
+        assert client.post(f"/api/engagements/{foreign}/authorize", headers=XRW).status_code == 404
         assert db.authorize_engagement(foreign, owner, account_id=b) is False
         assert db.authorize_engagement(foreign, owner, account_id=a) is False
         assert db.get_engagement(foreign, account_id=b)["status"] == "draft"
         with client.session_transaction() as session:
             session["uid"] = uid
-        assert client.post(f"/api/engagements/{own}/authorize").status_code == 403
+        assert client.post(f"/api/engagements/{own}/authorize", headers=XRW).status_code == 403
