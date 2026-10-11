@@ -12,7 +12,8 @@ async function main() {
   const owner=experience.overview(summary,ctx.window.CYMAG_DEMO.identity(),true,scopes);
   assert.match(owner,/executive-hero/);
   assert.match(owner,/DADOS SINTÉTICOS/);
-  assert.match(owner,/Zero não significa risco zero/);
+  assert.equal((owner.match(/Zero confirmados não significa ausência de risco/g) || []).length,1);
+  assert.ok(!owner.match(/hero-summary[\s\S]*Zero não significa risco zero/));
   assert.ok(!owner.includes('/app/assessments/new'));
   ctx.window.CYMAG_DEMO.setRole('operator');
   const operator=experience.overview(summary,ctx.window.CYMAG_DEMO.identity(),true,null);

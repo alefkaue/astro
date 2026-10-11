@@ -1,3 +1,4 @@
+if (process.env.ASTRO_SKIP_BROWSER === '1') { console.log('SKIP browser_redesign: offline requested; no browser or server used.'); process.exit(0); }
 // Real Edge smoke test through local CDP. Start Edge on debug port 9222 first.
 const fs = require('node:fs');
 const assert = require('node:assert/strict');

@@ -12,7 +12,7 @@ const state = { user: null, lastScan: null, engagements: [], section: null, auto
 
 /* Feature liberada pelo plano DA CONTA (autonomous | ai | training | managed). */
 const hasFeature = (f) => !!(state.user && state.user.plan && state.user.plan[f]);
-const ROLE_LABEL = { owner: "Dono", operator: "Operador", viewer: "Executivo", cymag: "Equipe ASTRO", admin: "Admin" };
+const ROLE_LABEL = { owner: "Dono", operator: "Analista de TI", viewer: "Diretoria", cymag: "Equipe ASTRO", admin: "Admin" };
 
 /* ─── API ───
    Quando o modo demonstração está ativo (window.CYMAG_DEMO.active), toda chamada
@@ -36,9 +36,28 @@ async function api(path, { method = "GET", body = null } = {}) {
 function toast(msg, kind = "info", ms = 3800) {
   const t = document.createElement("div");
   t.className = "toast " + kind; t.textContent = msg;
-  $("#toasts").appendChild(t);
+  $("#toasts").replaceChildren(t);
   setTimeout(() => t.remove(), ms);
 }
+function fieldError(id, message) {
+  const field = document.getElementById(id);
+  let error = document.getElementById(id + '-error');
+  if (!error) {
+    error = document.createElement('p'); error.id = id + '-error';
+    error.className = 'field-error'; error.setAttribute('role', 'alert');
+    field.insertAdjacentElement('afterend', error);
+    field.addEventListener('input', () => {
+      if ((field.type === 'checkbox' ? field.checked : field.value.trim() && field.validity.valid)) { error.textContent = ''; field.removeAttribute('aria-invalid'); }
+    });
+  }
+  const described = new Set((field.getAttribute('aria-describedby') || '').split(' ').filter(Boolean));
+  described.add(error.id); field.setAttribute('aria-describedby', [...described].join(' '));
+  error.textContent = message;
+  if (message) field.setAttribute('aria-invalid', 'true'); else field.removeAttribute('aria-invalid');
+}
+const CATEGORY_LABELS = {smb_ad:'Compartilhamento e domínio (SMB/AD)',iot_ot:'Dispositivos e tecnologia operacional (IoT/OT)',remote_access:'Acesso remoto',database:'Banco de dados',web:'Aplicações web'};
+const categoryLabel = value => CATEGORY_LABELS[value] || 'Outra categoria';
+const SCOPE_STATUS_LABELS = {authorized:'Autorizado',draft:'Rascunho',active:'Ativo',closed:'Encerrado'};
 function openModal(html, wide) { const m = $("#modal"); m.innerHTML = html; m.classList.toggle("wide", !!wide); $("#modal-back").classList.add("open"); }
 function closeModal() { $("#modal-back").classList.remove("open"); }
 $("#modal-back").addEventListener("click", e => { if (e.target.id === "modal-back") closeModal(); });
@@ -96,11 +115,14 @@ const gaugeColor = (v) => v >= 60 ? "var(--red)" : v >= 30 ? "var(--yellow)" : "
 
 /* ─── LOGIN ─── */
 function showLogin() {
+  document.title = "Entrar · ASTRO Cyber";
+  $("#login-theme-slot").appendChild($(".theme-control"));
   clearInterval(state.autoTimer);
   $("#view-app").classList.remove("active");
   $("#view-login").classList.add("active");
 }
 function showApp() {
+  $("#topbar-theme-slot").appendChild($(".theme-control"));
   $("#view-login").classList.remove("active");
   $("#view-app").classList.add("active");
 }
@@ -110,7 +132,9 @@ async function doLogin() {
   const password = $("#login-pass").value;
   const err = $("#login-error");
   err.classList.add("hidden");
-  if (!email || !password) { err.textContent = "Informe e-mail e chave de acesso."; err.classList.remove("hidden"); return; }
+  fieldError('login-email', !email ? 'Informe o e-mail.' : !$('#login-email').validity.valid ? 'Informe um e-mail válido.' : '');
+  fieldError('login-pass', !password ? 'Informe a chave de acesso.' : '');
+  if (!email || !password || !$('#login-email').validity.valid) { $('[aria-invalid="true"]').focus(); return; }
   const btn = $("#login-btn");
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Autenticando…';
   try {
@@ -485,12 +509,12 @@ async function renderEngagements() {
   const isStaff = !!state.user.is_staff;
   box.innerHTML = `
     <div class="card mb">
-      <h3>Novo escopo</h3>
+      <h3>Novo escopo</h3><p>Criar salva um rascunho. Autorizar permite que avaliações sejam iniciadas nos endereços listados, dentro dos limites do método.</p><p>${isAdmin ? 'Autorize somente redes e ativos que você tem permissão para avaliar.' : 'Somente o Dono ou Admin desta organização pode autorizar. Solicite a revisão a um deles.'}</p>
       <div class="${isStaff ? "grid grid-2" : ""}">
         <div class="field"><label class="field-label" for="eng-name">Nome</label><input class="input" id="eng-name" placeholder="${isStaff ? "Avaliação ACME Q3" : "Rede do escritório"}"></div>
         ${isStaff ? `<div class="field"><label class="field-label" for="eng-client">Cliente</label><input class="input" id="eng-client" placeholder="ACME Corp"></div>` : ""}
       </div>
-      <div class="field"><label class="field-label" for="eng-scope">Escopo autorizado (CIDRs/IPs, um por linha ou separados por vírgula)</label>
+      <div class="field"><label class="field-label" for="eng-scope">Endereços propostos (CIDRs/IPs, um por linha ou separados por vírgula)</label>
         <textarea class="input" id="eng-scope" placeholder="192.168.0.0/24&#10;10.0.0.5"></textarea></div>
       <button class="btn btn-primary" id="eng-create">Criar escopo</button>
     </div>
@@ -501,7 +525,7 @@ async function renderEngagements() {
           <td><b>${esc(e.name)}</b></td>
           ${isStaff ? `<td>${esc(e.client || "—")}</td>` : ""}
           <td class="mono" style="font-size:.8rem">${esc((e.scope || []).join(", "))}</td>
-          <td><span class="badge badge-status st-${e.status}">${esc(e.status)}</span></td>
+          <td><span class="badge badge-status st-${e.status}">${esc(SCOPE_STATUS_LABELS[e.status] || e.status)}</span></td>
           <td>${isAdmin && e.status !== "authorized" ? `<button class="btn btn-sm" data-auth="${e.id}">Autorizar</button>` : ""}</td>
         </tr>`).join("")}
       </tbody></table>` : `<p class="empty">Nenhum escopo cadastrado.</p>`}
@@ -515,13 +539,14 @@ async function createEngagement() {
   const name = $("#eng-name").value.trim();
   const client = $("#eng-client")?.value.trim() || "";
   const scope = $("#eng-scope").value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-  if (!name) { toast("Informe o nome.", "err"); return; }
-  if (!scope.length) { toast("Informe ao menos um IP/CIDR no escopo.", "err"); return; }
+  fieldError('eng-name', !name ? 'Informe o nome.' : '');
+  fieldError('eng-scope', !scope.length ? 'Informe ao menos um IP/CIDR no escopo.' : '');
+  if (!name || !scope.length) { $('[aria-invalid="true"]', $('#sec-engagements')).focus(); return; }
   try {
     await api("/api/engagements", { method: "POST", body: { name, client, scope } });
     toast("Escopo criado.", "ok");
     renderEngagements();
-  } catch (e) { toast(e.message || "Falha ao criar.", "err"); }
+  } catch (e) { fieldError("eng-scope", e.message || "Falha ao criar. Revise os endereços e tente novamente."); }
 }
 
 async function authorizeEngagement(id) {
@@ -781,54 +806,85 @@ function verificationBadge(f) {
 }
 function findingsTable(list) {
   if (!list || !list.length) return '<p class="empty">Nenhum achado registrado nesta avaliação. Consulte a cobertura e as limitações.</p>';
-  const sorted = [...list].sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
-  return `<table class="table"><thead><tr><th>Severidade</th><th>Achado / validação</th><th>Área</th><th>Ativo</th><th>CVSS</th><th>Ações</th></tr></thead><tbody>
-    ${sorted.map((f, i) => `<tr>
-      <td>${sevBadge(f.sev)}</td>
-      <td><b>${esc(f.title)}</b><div>${verificationBadge(f)}</div><div class="finding-detail">${esc((f.desc || "").slice(0, 120))}</div><details><summary>Evidência técnica</summary><pre class="mono evidence">${esc(f.evidence || "Nenhuma evidência registrada.")}</pre><p class="mut">Confiança: ${esc(f.confidence || "não informada")}</p></details></td>
-      <td>${f.category ? `<span class="badge badge-area">${esc(f.category)}</span>` : "—"}</td>
-      <td class="mono" style="font-size:.82rem">${esc(f.host || "")}:${esc(f.port || "")}</td>
-      <td class="mono">${esc(f.cvss ?? "—")}</td>
-      <td>${hasFeature("ai")
-        ? `<button class="btn btn-sm" data-remediate="${i}">Analisar</button>`
-        : `<button class="btn btn-sm" data-upsell="ai" title="Análise por IA — requer plano Profissional">🔒 IA</button>`}</td>
-    </tr>`).join("")}</tbody></table>`;
+  const options = (values, labels = {}) => [...new Set(values)].filter(Boolean).map(v => `<option value="${esc(v)}">${esc(labels[v] || v)}</option>`).join('');
+  return `<div class="findings-browser"><div class="findings-toolbar">
+    <label>Buscar achado<input class="input" data-filter="q" type="search" placeholder="Buscar achado"></label>
+    <label>Severidade<select class="input" data-filter="sev"><option value="">Todas</option>${options(list.map(f=>f.sev),{crit:'Crítica',high:'Alta',med:'Média',low:'Baixa',info:'Informativa'})}</select></label>
+    <label>Ativo<select class="input" data-filter="host"><option value="">Todos</option>${options(list.map(f=>f.host))}</select></label>
+    <label>Validação<select class="input" data-filter="verification_status"><option value="">Todas</option>${options(list.map(f=>f.verification_status || 'unclassified'),{...VERIFICATION,unclassified:'Sem classificação'})}</select></label>
+    <label>Densidade<select class="input" data-density-control><option value="comfortable">Confortável</option><option value="compact">Compacto</option></select></label>
+    </div><div class="finding-chips" aria-label="Filtros ativos"></div><p class="finding-count" role="status"></p>
+    <div class="findings-scroll" data-density="comfortable"><table class="table mobile-cards"><thead><tr>${[['sev','Severidade'],['title','Achado / validação'],['category','Área'],['host','Ativo'],['cvss','CVSS']].map(([key,label])=>`<th aria-sort="none"><button type="button" data-sort="${key}">${label} ↕</button></th>`).join('')}<th>Ações</th></tr></thead><tbody></tbody></table></div></div>`;
 }
-
 function wireFindingButtons(scope, findings = state.lastScan?.cyber_vulns || []) {
-  $$("[data-remediate]", scope).forEach(btn => {
-    btn.addEventListener("click", () => {
-      const list = findings;
-      const sorted = [...list].sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
-      openRemediation(sorted[Number(btn.dataset.remediate)]);
-    });
-  });
-  $$("[data-upsell]", scope).forEach(btn => {
-    btn.addEventListener("click", () => { toast("Recurso do plano Profissional. Veja em Planos.", "info"); showSection("planos"); });
+  $$('.findings-browser', scope).forEach(browser => {
+    let sort = 'sev', direction = 1;
+    const filters = {};
+    const scroll = browser.querySelector('.findings-scroll');
+    const density = browser.querySelector('[data-density-control]');
+    try { density.value = localStorage.getItem('astro-findings-density') === 'compact' ? 'compact' : 'comfortable'; } catch (_) {}
+    scroll.dataset.density = density.value;
+    density.addEventListener('change', () => { scroll.dataset.density = density.value; try { localStorage.setItem('astro-findings-density',density.value); } catch (_) {} });
+    function draw() {
+      const rows = findings.map((f,index)=>({f,index})).filter(({f}) => Object.entries(filters).every(([key,value])=>!value || (key==='q' ? [f.title,f.desc,f.evidence,f.host].join(' ').toLocaleLowerCase('pt-BR').includes(value.toLocaleLowerCase('pt-BR')) : String(f[key] || (key==='verification_status' ? 'unclassified' : '')) === value)));
+      rows.sort((a,b)=>direction * (sort === 'sev' ? (SEV_ORDER[a.f.sev] ?? 9)-(SEV_ORDER[b.f.sev] ?? 9) : sort === 'cvss' ? Number(a.f.cvss ?? -1)-Number(b.f.cvss ?? -1) : String(a.f[sort] || '').localeCompare(String(b.f[sort] || ''),'pt-BR',{numeric:true})));
+      browser.querySelector('.finding-count').textContent = `${rows.length} de ${findings.length} achados`;
+      browser.querySelector('.finding-chips').innerHTML = Object.entries(filters).filter(([,v])=>v).map(([key,value])=> {
+        const control = browser.querySelector(`[data-filter="${key}"]`);
+        const label = control.selectedOptions ? control.selectedOptions[0].textContent : value;
+        return `<button class="btn btn-sm" data-remove="${key}" aria-label="Remover filtro ${esc(label)}">${esc(label)} ×</button>`;
+      }).join('') + (Object.values(filters).some(Boolean) ? '<button class="btn btn-sm" data-clear>Limpar filtros</button>' : '');
+      browser.querySelector('tbody').innerHTML = rows.length ? rows.map(({f,index})=>`<tr>
+        <td data-label="Severidade">${sevBadge(f.sev)}</td>
+        <td data-label="Achado / validação"><b>${esc(f.title)}</b><div>${verificationBadge(f)}</div><details><summary>Ver descrição e evidência</summary><p>${esc(f.desc || 'Descrição não registrada.')}</p><p>Categoria técnica: <code>${esc(f.category || 'Não informada')}</code></p><pre class="mono evidence">${esc(f.evidence || 'Nenhuma evidência registrada.')}</pre><p class="mut">Confiança: ${esc(f.confidence || 'não informada')}</p></details></td>
+        <td data-label="Área">${esc(categoryLabel(f.category || 'Não informada'))}</td><td data-label="Ativo" class="mono">${esc(f.host)}:${esc(f.port)}</td><td data-label="CVSS">${esc(f.cvss ?? '—')}</td>
+        <td data-label="Ações">${hasFeature('ai') ? `<button class="btn btn-sm" data-remediate="${index}">Ver orientação de análise</button>` : '<span class="mut">Orientação de IA requer plano Profissional</span>'}</td></tr>`).join('') : '<tr><td colspan="6">Nenhum achado corresponde aos filtros. Remova os chips ou use Limpar filtros.</td></tr>';
+      $$('[data-remediate]',browser).forEach(btn=>btn.addEventListener('click',()=> {
+        const y = window.scrollY, position = scroll.scrollTop;
+        openRemediation(findings[Number(btn.dataset.remediate)]);
+        const back = $('#modal-back');
+        const observer = new MutationObserver(()=> { if (!back.classList.contains('open')) { observer.disconnect(); window.scrollTo(0,y); scroll.scrollTop=position; btn.focus({preventScroll:true}); } });
+        observer.observe(back,{attributes:true,attributeFilter:['class']});
+      }));
+      $$('[data-remove]',browser).forEach(btn=>btn.addEventListener('click',()=> { filters[btn.dataset.remove]=''; browser.querySelector(`[data-filter="${btn.dataset.remove}"]`).value=''; draw(); }));
+      browser.querySelector('[data-clear]')?.addEventListener('click',()=> { Object.keys(filters).forEach(key=>filters[key]=''); $$('[data-filter]',browser).forEach(control=>control.value=''); draw(); });
+    }
+    $$('[data-filter]',browser).forEach(control=>control.addEventListener('input',()=> { filters[control.dataset.filter]=control.value; draw(); }));
+    $$('[data-sort]',browser).forEach(btn=>btn.addEventListener('click',()=> { direction=sort===btn.dataset.sort ? -direction : 1; sort=btn.dataset.sort; $$('th[aria-sort]',browser).forEach(th=>th.setAttribute('aria-sort','none')); btn.parentElement.setAttribute('aria-sort',direction===1 ? 'ascending' : 'descending'); draw(); }));
+    draw();
   });
 }
 
 async function openRemediation(vuln) {
   if (!vuln) return;
-  const persona = state.user.view === "executive" ? "exec" : "secops";
-  openModal(`<h2>${esc(vuln.title)}</h2><div class="row mb">${sevBadge(vuln.sev)} ${vuln.category ? `<span class="badge badge-area">${esc(vuln.category)}</span>` : ""} <span class="mono mut">${esc(vuln.host || "")}:${esc(vuln.port || "")}</span></div>
-    <p class="mut">${esc(vuln.desc || "")}</p><div class="divider"></div>
-    <div id="rem-body"><div class="row"><span class="spinner"></span> <span class="mut">AEGIS analisando…</span></div></div>
-    <div class="row" style="justify-content:flex-end;margin-top:1rem"><button class="btn" onclick="closeModalGlobal()">Fechar</button></div>`);
+  const persona = ["owner", "viewer"].includes(state.user.role) ? "exec" : "secops";
+  openModal(`<h2>${esc(vuln.title)}</h2><div class="row mb">${sevBadge(vuln.sev)} ${verificationBadge(vuln)} ${isDemo() ? '<span class="badge">Dado sintético</span>' : ''}</div>
+    <section><h3>Evidência registrada</h3><p>${esc(vuln.desc || 'Descrição não registrada.')}</p><pre class="evidence mono">${esc(vuln.evidence || 'Nenhuma evidência registrada.')}</pre></section>
+    <section><h3>Resultado da avaliação</h3><p>${esc(VERIFICATION[vuln.verification_status] || 'Sem classificação')} · ${esc(vuln.host)}:${esc(vuln.port)}</p><p>Orientação não confirma o achado nem comprova impacto.</p></section>
+    <section><h3>Sugestão de análise</h3><p>${isDemo() ? 'Origem: orientação determinística da demonstração; dados sintéticos.' : 'Origem: serviço AEGIS. A resposta pode usar IA ou orientação determinística; a API não informa qual origem foi usada.'}</p><div id="rem-body" role="status">Carregando orientação…</div></section>
+    <div class="row"><button class="btn" id="copy-guidance" disabled>Copiar orientação</button><button class="btn" onclick="closeModalGlobal()">Fechar</button></div>`);
+  const target = $('#rem-body'), copy = $('#copy-guidance');
   try {
-    const r = await api("/api/remediation", { method: "POST", body: { vuln, persona, all_findings: state.lastScan?.cyber_vulns || [] } });
-    $("#rem-body").innerHTML = persona === "exec" ? execRemediationHTML(r) : secopsRemediationHTML(r);
-  } catch (e) {
-    $("#rem-body").innerHTML = `<p class="mut">Falha ao obter análise: ${esc(e.message)}</p>`;
-  }
+    const r = await api('/api/remediation', {method:'POST',body:{vuln,persona,all_findings:state.lastScan?.cyber_vulns || []}});
+    if (!target.isConnected) return;
+    target.innerHTML = persona === 'exec' ? execRemediationHTML(r) : secopsRemediationHTML(r, vuln.verification_status === 'confirmed');
+    if (persona === 'exec' && vuln.verification_status !== 'confirmed') target.insertAdjacentHTML('afterbegin', '<p><b>Somente se confirmado:</b> encaminhe qualquer remediação à TI após validar a evidência.</p>');
+    copy.disabled = false;
+    copy.addEventListener('click', async () => {
+      const text = $('#modal').innerText;
+      try { await navigator.clipboard.writeText(text); toast('Orientação copiada.'); }
+      catch (_) { const field = document.createElement('textarea'); field.className='input'; field.value=text; field.setAttribute('aria-label','Orientação para copiar'); target.appendChild(field); field.focus(); field.select(); }
+    });
+  } catch (error) { if (target.isConnected) target.textContent = 'Falha ao obter orientação: '+error.message; }
 }
-function secopsRemediationHTML(r) {
+function secopsRemediationHTML(r, confirmed = false) {
   return `
-    ${r.steps ? `<h3>Passos</h3><ol style="padding-left:1.1rem">${r.steps.map(s => `<li style="margin-bottom:.3rem">${esc(s)}</li>`).join("")}</ol>` : ""}
+    ${r.steps ? `${confirmed ? "" : "<p class=\"guidance-warning\">Estes passos só valem se o achado for confirmado</p>"}<h3>Passos</h3><ol style="padding-left:1.1rem">${r.steps.map(s => `<li style="margin-bottom:.3rem">${esc(String(s).replace(/^\s*\d+[.)]\s*/, ""))}</li>`).join("")}</ol>` : ""}
+    <details class="technical-guidance"><summary>Detalhes técnicos para a TI</summary>
     ${r.commands ? `<h3>Comandos</h3><pre class="mono" style="background:var(--bg);padding:.8rem;border-radius:.4rem;overflow:auto;font-size:.8rem">${esc(r.commands)}</pre>` : ""}
     ${r.attack_chain ? `<p><b>Cadeia de ataque:</b> ${esc(r.attack_chain)}</p>` : ""}
     ${r.mitre_tactics ? `<p><b>MITRE:</b> ${esc((r.mitre_tactics || []).join(", "))}</p>` : ""}
-    ${r.next_recon ? `<p><b>Próximo recon:</b> <code>${esc(r.next_recon)}</code></p>` : ""}`;
+    ${r.next_recon ? `<p><b>Próximo recon:</b> <code>${esc(r.next_recon)}</code></p>` : ""}</details>`;
 }
 function execRemediationHTML(r) {
   return `
@@ -1073,12 +1129,12 @@ function renderCentral() {
     api("/api/accounts").then(r => r.accounts).catch(() => []),
     api("/api/reviews").then(r => r.queue).catch(() => []),
   ]).then(([accounts, queue]) => {
-    const head = clientsCard(accounts);
+    const head = `<div class="card mb legacy-explanation"><h2>Operação interna · legado</h2><p>Fila de validação e laudo. A troca entre organizações ainda não está disponível.</p><p>Indicador de risco legado: valor risk_score armazenado pela avaliação antiga, agregado de pesos por severidade (crítica 15, alta 8, média 3, baixa 1), limitado a 100. Não é CVSS, não mede cobertura e não comprova achados confirmados.</p></div>` + clientsCard(accounts);
     if (!queue.length) { box.innerHTML = head + `<div class="card"><p class="empty">Nenhum scan aguardando entrega/laudo. 🎉</p></div>`; return; }
     box.innerHTML = head + `<div class="card"><h3>Scans aguardando validação e laudo (${queue.length})</h3>
-      <table class="table"><thead><tr><th>#</th><th>Alvo</th><th>Achados</th><th>Risco</th><th>Quando</th><th></th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>#</th><th>Cliente</th><th>Alvo</th><th>Achados</th><th>Risco legado</th><th>Quando</th><th></th></tr></thead><tbody>
       ${queue.map(s => `<tr>
-        <td class="mono">${s.id}</td>
+        <td class="mono">${s.id}</td><td>${esc(accounts.find(a => a.id === s.account_id)?.name || "Cliente não vinculado")}</td>
         <td class="mono" style="font-size:.82rem">${esc(s.target)}</td>
         <td>${s.findings_count ?? 0}</td>
         <td><b>${s.risk_score ?? 0}</b>/100</td>
@@ -1116,7 +1172,7 @@ function iaStatusBadge(s) {
             : "Sem chave — rodando em modo offline (respostas determinísticas)."}</span>
         </div>
         <div class="mut" style="font-size:.82rem;text-align:right">
-          ${on ? `Chave <code>${esc(s.key_mask || "—")}</code><br>origem: ${esc(src)}` : ""}
+          ${on ? `Origem: ${esc(src)}` : ""}
         </div>
       </div>
     </div>`;
@@ -1126,12 +1182,12 @@ function renderIA() {
   const box = $("#sec-ia");
   box.innerHTML = `<div class="card"><span class="spinner"></span> <span class="mut">Carregando status da IA…</span></div>`;
   api("/api/admin/ai/status").then(s => {
-    const models = (s.known_models || []).map(m => `<option value="${esc(m)}">`).join("");
+    const models = [...new Set([s.model,...(s.known_models || [])].filter(Boolean))].map(m => `<option value="${esc(m)}" ${m === s.model ? 'selected' : ''}>${esc(m)}</option>`).join("");
     box.innerHTML = `
       <div id="ia-status">${iaStatusBadge(s)}</div>
       <div class="grid grid-2">
         <div class="card">
-          <h3>Configurar / testar a API</h3>
+          <h3>Integração de IA</h3><p>Teste a conexão sem salvar; depois aplique o valor testado.</p><p>Provedor atual: <b>${esc(s.provider || "Offline")}</b>. O modelo define quem responde; o endereço identifica o serviço.</p><p id="ia-test-state" role="status">Não testada</p>
           <p class="mut" style="font-size:.84rem;margin-bottom:.8rem">
             Cole a chave de qualquer conta (ex.: a sua da <b>Groq</b>), escolha o modelo e
             clique em <b>Testar</b>. Se a resposta vier, clique em <b>Aplicar</b> para ativar o AEGIS.</p>
@@ -1143,8 +1199,7 @@ function renderIA() {
           </div>
           <div class="field">
             <label class="field-label" for="ia-model">Modelo</label>
-            <input id="ia-model" class="input" list="ia-models" value="${esc(s.model || "")}" autocomplete="off">
-            <datalist id="ia-models">${models}</datalist>
+            <select id="ia-model" class="input">${models}</select>
           </div>
           <details style="margin:.2rem 0 .8rem">
             <summary class="mut" style="cursor:pointer;font-size:.82rem">Opções avançadas (outro provedor)</summary>
@@ -1161,9 +1216,9 @@ function renderIA() {
 
           <div class="row" style="gap:.5rem;flex-wrap:wrap">
             <button class="btn btn-primary" id="ia-test">Testar conexão</button>
-            <button class="btn btn-gradient" id="ia-apply">Aplicar e ativar</button>
+            <button class="btn" id="ia-apply" disabled>Aplicar e ativar</button>
             <button class="btn btn-ghost" id="ia-reset" title="Descartar a chave salva e voltar ao .env">Restaurar padrão</button>
-          </div>
+          </div><div id="ia-reset-confirm" hidden><p>Remove a configuração salva e restaura provedor, modelo e chave do ambiente do servidor. O padrão pode ficar offline.</p><button class="btn" id="ia-reset-yes">Confirmar restauração</button><button class="btn" id="ia-reset-no">Cancelar</button></div>
         </div>
 
         <div class="card">
@@ -1181,36 +1236,44 @@ function renderIA() {
       prompt: promptEl.value.trim(),
     });
 
+    let tested = null, testing = false;
+    const fingerprint = () => JSON.stringify(payload());
+    const resetTest = () => { tested = null; $('#ia-test-state').textContent = 'Não testada'; $('#ia-apply').disabled = true; $('#ia-apply').classList.remove('btn-primary'); $('#ia-test').classList.add('btn-primary'); };
+    [keyEl,modelEl,baseEl,promptEl].forEach(el => el.addEventListener('input', resetTest));
+    $('#ia-reset').addEventListener('click', () => { $('#ia-reset-confirm').hidden = false; });
+    $('#ia-reset-no').addEventListener('click', () => { $('#ia-reset-confirm').hidden = true; });
     const refreshStatus = () => api("/api/admin/ai/status")
       .then(st => { $("#ia-status").innerHTML = iaStatusBadge(st); }).catch(() => {});
 
     $("#ia-test").addEventListener("click", () => {
       const p = payload();
-      if (!p.api_key) { toast("Informe uma chave de API.", "err"); keyEl.focus(); return; }
+      if (!p.api_key) { fieldError("ia-key", "Informe uma chave de API."); keyEl.focus(); return; }
       const btn = $("#ia-test"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Testando…';
+      resetTest(); testing = true; const submitted = fingerprint();
       resEl.innerHTML = `<p class="mut"><span class="spinner"></span> Consultando o provedor…</p>`;
       api("/api/admin/ai/test", { method: "POST", body: p })
-        .then(r => { resEl.innerHTML = iaResultHTML(r, true); })
-        .catch(e => { resEl.innerHTML = iaResultHTML(e.data || { ok: false, error: e.message }, false); })
-        .finally(() => { btn.disabled = false; btn.textContent = "Testar conexão"; });
+        .then(r => { if (submitted !== fingerprint()) return; resEl.innerHTML = iaResultHTML(r, true); tested = r.ok ? submitted : null; $('#ia-test-state').textContent = r.ok ? 'Teste OK: resposta recebida do modelo ' + r.model : 'Falhou: ' + (r.error || 'Provedor não respondeu'); $('#ia-apply').disabled = !tested; $('#ia-apply').classList.toggle('btn-primary',!!tested); btn.classList.toggle('btn-primary',!tested); })
+        .catch(e => { if(submitted !== fingerprint()) return; tested = null; $('#ia-test-state').textContent = 'Falhou: ' + (e.data?.error || e.message); resEl.innerHTML = iaResultHTML(e.data || { ok: false, error: e.message }, false); })
+        .finally(() => { testing = false; btn.disabled = false; btn.textContent = "Testar conexão"; });
     });
 
     $("#ia-apply").addEventListener("click", () => {
+      if(testing || tested !== fingerprint()) return;
       const p = payload();
-      if (!p.api_key) { toast("Informe uma chave de API.", "err"); keyEl.focus(); return; }
+      if (!p.api_key) { fieldError("ia-key", "Informe uma chave de API."); keyEl.focus(); return; }
       const btn = $("#ia-apply"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Aplicando…';
       api("/api/admin/ai/apply", { method: "POST", body: p })
-        .then(() => { toast("AEGIS ativado com esta chave! ✅", "ok"); keyEl.value = ""; refreshStatus(); })
+        .then(() => { toast("AEGIS ativado com esta chave! ✅", "ok"); keyEl.value = ""; resetTest(); refreshStatus(); })
         .catch(e => { toast((e.data && e.data.error) || e.message || "Falha ao aplicar.", "err"); })
-        .finally(() => { btn.disabled = false; btn.textContent = "Aplicar e ativar"; });
+        .finally(() => { btn.disabled = tested !== fingerprint(); btn.textContent = "Aplicar e ativar"; });
     });
 
-    $("#ia-reset").addEventListener("click", () => {
+    $("#ia-reset-yes").addEventListener("click", () => {
       const btn = $("#ia-reset"); btn.disabled = true;
       api("/api/admin/ai/reset", { method: "POST" })
-        .then(() => { toast("Configuração restaurada para o padrão (.env).", "info"); keyEl.value = ""; refreshStatus(); })
+        .then(() => { toast("Configuração restaurada para o padrão (.env).", "info"); keyEl.value = ""; resetTest(); refreshStatus(); })
         .catch(e => { toast(e.message || "Falha ao restaurar.", "err"); })
-        .finally(() => { btn.disabled = false; });
+        .finally(() => { btn.disabled = false; $("#ia-reset-confirm").hidden = true; });
     });
   }).catch(() => {
     box.innerHTML = `<div class="card"><p class="mut">Falha ao carregar o painel de IA. Este painel é exclusivo do admin.</p></div>`;
@@ -1357,4 +1420,10 @@ document.addEventListener("DOMContentLoaded", async function boot() {
     const me = await api("/api/me");
     if (me.authenticated) enterApp(me);
   } catch (e) { /* não autenticado — fica no login */ }
+});
+
+$('#demo-toggle').addEventListener('click', () => {
+  const expanded = $('#demo-toggle').getAttribute('aria-expanded') !== 'true';
+  $('#demo-toggle').setAttribute('aria-expanded', String(expanded));
+  $('#demobar').classList.toggle('expanded', expanded);
 });

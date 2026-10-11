@@ -14,12 +14,12 @@
 <link rel="icon" href="static/brand/favicon.svg" type="image/svg+xml">
 <script src="static/astro-theme.js"></script>
 <link rel="stylesheet" href="static/cymag.css">
-<link rel="stylesheet" href="static/astro.css?v=readability-3">
-<link rel="stylesheet" href="static/astro-workspace.css?v=readability-3">
+<link rel="stylesheet" href="static/astro.css?v=ux-wave3">
+<link rel="stylesheet" href="static/astro-workspace.css?v=ux-wave3">
 </head>
 <body>
 <a href="#main-content" class="skip-link">Ir para o conteúdo</a>
-<div class="theme-control"><label for="astro-theme">Tema</label> <select id="astro-theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div>
+
 
 <!-- ══════════ LOGIN / LANDING ══════════ -->
 <section id="view-login" class="view active">
@@ -27,10 +27,10 @@
   <div class="landing-hero">
     <div class="brand"><img class="astro-wordmark astro-logo-dark" src="static/brand/logo-astro-preto.svg" alt="ASTRO"><img class="astro-wordmark astro-logo-light" src="static/brand/logo-astro-branco.svg" alt="ASTRO"><span class="product-signature">CYBER</span></div>
     <span class="hero-eyebrow"><span class="dot"></span> Avaliação defensiva · Em desenvolvimento</span>
-    <h1>Segurança de nível enterprise para quem não tem um time de segurança.</h1>
+    <h1>Entenda o que está exposto na rede da sua empresa.</h1>
     <p class="lede">Conheça a exposição dos seus ativos autorizados, consulte evidências e organize as próximas ações da sua equipe.</p>
     <div class="hero-points">
-      <div class="hero-point"><span class="ic">◆</span> <span>Inventário TCP dentro do escopo autorizado, com limites de execução.</span></div>
+      <div class="hero-point"><span class="ic">◆</span> <span>Identifique serviços acessíveis, como acesso remoto e bancos de dados, nos alvos autorizados.</span></div>
       <div class="hero-point"><span class="ic">◆</span> <span>Observações, suspeitas e confirmações identificadas separadamente.</span></div>
       <div class="hero-point"><span class="ic">◆</span> <span>Histórico persistido e relatórios vinculados às avaliações.</span></div>
     </div>
@@ -43,10 +43,10 @@
 
   <!-- Lado direito: entrar -->
   <div class="login-pane">
-    <div class="login-card">
+    <div class="login-card"><div id="login-theme-slot"><div class="theme-control"><label for="astro-theme">Tema</label> <select id="astro-theme"><option value="system">Sistema</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div></div>
       <div class="brand"><img class="astro-wordmark astro-logo-dark" src="static/brand/logo-astro-preto.svg" alt="ASTRO"><img class="astro-wordmark astro-logo-light" src="static/brand/logo-astro-branco.svg" alt="ASTRO"><span class="product-signature">CYBER</span></div>
       <h1>Entrar na plataforma</h1>
-      <p class="sub">Acesse com uma conta real (backend) ou explore tudo no modo demonstração.</p>
+      <p class="sub">Acesse com uma conta ou explore tudo no modo demonstração.</p>
 
       <button id="demo-btn" class="btn btn-gradient btn-full btn-lg">▶ Explorar demonstração (sem login)</button>
       <p class="sub" style="text-align:center;margin:.6rem 0 0;font-size:.76rem">Roda 100% no seu navegador — nenhum dado sai daqui.</p>
@@ -58,11 +58,11 @@
         <input id="login-email" class="input" type="email" autocomplete="email" >
       </div>
       <div class="field">
-        <label class="field-label" for="login-pass">Chave de acesso</label>
-        <input id="login-pass" class="input" type="password" autocomplete="current-password" >
+        <label class="field-label" for="login-pass">Senha ou chave de acesso</label>
+        <input id="login-pass" class="input" type="password" autocomplete="current-password" aria-describedby="login-access-hint" ><p id="login-access-hint" class="mut">Use a senha ou chave fornecida para sua conta.</p><p class="mut">Esqueceu o acesso? Fale com o administrador da sua organização.</p>
       </div>
       <div id="login-error" class="field-error hidden"></div>
-      <button id="login-btn" class="btn btn-primary btn-full" style="margin-top:.5rem">Acessar plataforma</button>
+      <button id="login-btn" class="btn btn-primary btn-full" style="margin-top:.5rem">Entrar com conta</button>
 
 
     </div>
@@ -94,7 +94,7 @@
       <!-- barra de demonstração (só aparece no modo demo) -->
       <div id="demobar" class="demobar hidden">
         <span class="tag"><span class="dot"></span> Modo demonstração</span>
-        <span class="mut">Veja a plataforma por cada papel:</span>
+        <button class="btn btn-sm demo-toggle" id="demo-toggle" aria-expanded="false" aria-controls="role-switch demo-reset">Explorar papéis</button><span class="mut demo-description">Veja a plataforma por cada papel:</span>
         <div class="role-switch" id="role-switch"></div>
         <span class="spacer"></span>
         <button class="btn btn-sm btn-ghost" id="demo-reset" title="Zerar decisões e plano da demo">Reiniciar demo</button>
@@ -109,7 +109,7 @@
             <div class="page-sub" id="page-sub"></div>
           </div>
         </div>
-        <div class="row" id="topbar-actions"></div>
+        <div class="row topbar-tools"><div id="topbar-theme-slot"></div><div class="row" id="topbar-actions"></div></div>
       </div>
 
       <main class="content" id="main-content" tabindex="-1">
@@ -141,7 +141,8 @@
 <script src="static/cymag-demo.js"></script>
 <script src="static/cymag.js"></script>
 <script src="static/astro-routes.js"></script>
-<script src="static/astro-experience.js?v=experience-2"></script>
-<script src="static/astro-workspace.js?v=experience-2"></script>
+<script src="static/astro-experience.js?v=ux-wave3"></script>
+<script src="static/astro-workspace.js?v=ux-wave3"></script>
+<script src="static/astro-glossary.js?v=ux-wave3"></script>
 </body>
 </html>

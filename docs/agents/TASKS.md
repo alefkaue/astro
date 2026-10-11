@@ -104,3 +104,34 @@ Prioridade comercial revista: controle de alvos/escopos, gates de producao/IA/bi
 PILOT-GATES implementado por Codex; SCOPE-DENY delegado como patch revisavel ao Claude via -Task pilot-security (pendente execucao local). UI de capacidades de implantacao pendente. Pilot hospedado permanece bloqueado.
 
 SCOPE-DENY implementado por Codex; Claude entregou observacoes sem patch por bloqueio interno de seguranca. 139 testes passaram. Validacao de contratos, cobertura/jobs e auth permanecem pendentes. Ver SCOPE_SAFETY.md.
+
+## UX — ondas 1–3, fechamento 2026-10-11
+
+`done` descreve a implementação frontend e as verificações offline. Conferência visual, teclado real, zoom e leitor de tela ainda dependem do Claude. Não foram iniciados servidores/navegadores. Detalhes item a item e roteiro: [CHANGELOG_AGENTS.md](CHANGELOG_AGENTS.md).
+
+| ID | Estado | Entrega / dependência restante |
+| --- | --- | --- |
+| UX-01 | done | Pendência de revisão em destaque; zero confirmado não comprova segurança. |
+| UX-02 | done | Cinco contadores e decomposição explícita. |
+| UX-03 | done | Origem/classificação, orientação condicional única, comandos recolhidos e ausentes no executivo. |
+| UX-04 | done | Cartões móveis rotulados; datas/status/escopo em fonte normal. |
+| UX-05 | done | Alvo efetivo e consequência da execução no wizard. |
+| UX-06 | done | Autorização explicada; rascunho distinto; glossário contextual. |
+| UX-07 | done | Revisão pendente elevada no panorama operacional. |
+| UX-08 | parcial | Síntese executiva e resumo de relatório implementados; tendência comparável e impacto dependem de dados/método/cobertura do backend. |
+| UX-09 | done | Busca, filtros, chips, ordenação e densidade. |
+| UX-10 | done | Metadados recolhidos; sem rolagem interna da tabela; filtros móveis alinhados. |
+| UX-11 | done | Categorias traduzidas e descrição completa no detalhe. |
+| UX-12 | done | Tema no cabeçalho, compacto no mobile. |
+| UX-13 | done | Erros junto aos campos e recuperação dos filtros vazios. |
+| UX-14 | parcial | Cliente atual em avaliações/detalhe e coluna Cliente na fila; vínculo ausente é pendência. Troca de organização e carteira completa dependem do backend. |
+| UX-15 | done | Admin próprio; configurações por URL/seção; equipe somente leitura; operação interna no menu apenas para quem já tem acesso. |
+| UX-16 | done | Papéis e estados PT-BR preservados e uniformes. |
+| UX-17 | done | Contraste medido nos dois temas e textos auxiliares ampliados; QA visual real pendente. |
+| UX-18 | parcial | Console indisponível e controles desabilitados; eventos duráveis dependem do backend. |
+| UX-19 | done | Ajuda por tarefa, estados em linguagem simples, método/limites e glossário único com teclado. |
+| UX-20 | done | Teste real separado da aplicação, invalidação ao editar, resposta antiga rejeitada, chave não exibida, restauração confirmada inline. Testes reais de provedor precisam de ambiente autorizado. |
+| UX-21 | done | Função única de data humana com fuso local; registro técnico no atributo title. |
+| UX-22 | done | Nome do escopo obtido da API junto ao alvo; ausência explícita, sem inferir nome por coincidência de IP. |
+| UX-23 | parcial | Cartões informativos, contagens derivadas dos achados e resumo executivo. API de status da IA acessível apenas ao Admin: demais papéis veem opção indisponível com motivo até existir contrato público de disponibilidade. PDFs versionados/assinados dependem do backend. |
+| UX-24 | done | Demo compacta e notificações limitadas preservadas. |
