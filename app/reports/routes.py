@@ -11,12 +11,54 @@ from datetime import datetime
 
 from flask import Blueprint, jsonify, make_response, request
 
-from app.ai.aegis import AEGIS_SECOPS, aegis
-from app.auth.decorators import login_required
+from app import db
+from app.ai.aegis import AEGIS_SECOPS, aegis, sanitize_untrusted
+from app.auth.decorators import current_account_id, current_user, login_required
+from app.config import config
 
 logger = logging.getLogger("cymag.reports")
 
 reports_bp = Blueprint("reports", __name__)
+
+# Selo aplicado quando o ambiente é de demonstração (dados sintéticos).
+_DEMO_WATERMARK = "DADOS FICTICIOS - DEMONSTRACAO (nao representa avaliacao real)"
+
+
+def _load_authorized_scan(body):
+    """Resolve o scan pedido garantindo posse pelo tenant e monta os dados do laudo.
+
+    SEC-006: o relatório é SEMPRE construído a partir dos dados persistidos do scan
+    (do tenant), nunca de findings arbitrários enviados pelo cliente. Devolve
+    `(erro_json, status)` em caso de falha, ou `(dados, None)` em caso de sucesso.
+    """
+    scan_id = body.get("scan_id")
+    if not isinstance(scan_id, int):
+        return {"error": "scan_id (inteiro) é obrigatório para gerar o laudo."}, 400
+
+    account_id = current_account_id()
+    scan = db.get_scan(scan_id, account_id=account_id)
+    if scan is None:
+        return {"error": "Scan não encontrado."}, 404
+
+    findings = db.get_scan_findings(scan_id, account_id=account_id) or []
+    # Riscos executivos são derivados no backend (determinístico), não vêm do cliente.
+    exec_risks = [aegis.offline_exec_risk(f) for f in findings]
+
+    user = current_user()
+    provenance = (
+        f"scan_id={scan_id} | gerado_por={user['email'] if user else '—'} | "
+        f"findings={len(findings)} | risk_score={scan.get('risk_score', 0)}"
+    )
+    data = {
+        "scan": scan,
+        "target": scan.get("target", "N/A"),
+        "findings": findings,
+        "exec_risks": exec_risks,
+        "score": int(scan.get("risk_score") or 0),
+        "watermark": _DEMO_WATERMARK if config.ENV == "demo" else "",
+        "provenance": provenance,
+    }
+    return data, None
 
 
 def _pdf_response(pdf_bytes: bytes, prefix: str):
@@ -31,23 +73,24 @@ def _pdf_response(pdf_bytes: bytes, prefix: str):
 @reports_bp.route("/api/report/quick", methods=["POST"])
 @login_required
 def api_report_quick():
-    """Gera PDF padrão rápido. Body: { target, findings, exec_risks, score, hosts? }"""
+    """Gera PDF rápido a partir de um scan do tenant. Body: { scan_id }.
+
+    SEC-006: o laudo é montado no backend com os findings persistidos do scan
+    (verificando posse pelo tenant). Não aceita mais findings do cliente."""
     from app.reports.pdf import build_quick_pdf
 
     body = request.get_json(force=True) or {}
-    target = body.get("target", "N/A")
-    findings = body.get("findings", [])
-    exec_risks = body.get("exec_risks", [])
-    score = int(body.get("score", 0))
-    hosts = body.get("hosts", [])
+    data, status = _load_authorized_scan(body)
+    if status:
+        return jsonify(data), status
 
-    if hosts:
-        findings = [f for f in findings if f.get("host") in hosts]
-
-    logger.info("[PDF Quick] Gerando para alvo '%s' — %d vuln(s)", target, len(findings))
-
+    logger.info("[PDF Quick] scan=%s alvo='%s' — %d vuln(s)",
+                body.get("scan_id"), data["target"], len(data["findings"]))
     try:
-        pdf_bytes = build_quick_pdf(target, findings, exec_risks, score)
+        pdf_bytes = build_quick_pdf(
+            data["target"], data["findings"], data["exec_risks"], data["score"],
+            watermark=data["watermark"], provenance=data["provenance"],
+        )
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:
@@ -60,29 +103,36 @@ def api_report_quick():
 @reports_bp.route("/api/report/detailed", methods=["POST"])
 @login_required
 def api_report_detailed():
-    """Gera PDF detalhado com narrativa do AEGIS."""
+    """Gera PDF detalhado (com narrativa do AEGIS) a partir de um scan do tenant.
+
+    Body: { scan_id, instructions?, template? }. Os dados técnicos vêm do backend;
+    `instructions`/`template` são apenas apresentação e são sanitizados."""
     from app.reports.pdf import build_detailed_pdf
 
     body = request.get_json(force=True) or {}
-    target = body.get("target", "N/A")
-    findings = body.get("findings", [])
-    exec_risks = body.get("exec_risks", [])
-    score = int(body.get("score", 0))
-    hosts = body.get("hosts", [])
-    instructions = body.get("instructions", "Relatório profissional de segurança.")
-    template_str = body.get("template", "")
+    data, status = _load_authorized_scan(body)
+    if status:
+        return jsonify(data), status
 
-    if hosts:
-        findings = [f for f in findings if f.get("host") in hosts]
+    # Opções de apresentação são tratadas como texto não confiável do cliente.
+    instructions = sanitize_untrusted(
+        body.get("instructions") or "Relatório profissional de segurança.", 600)
+    template_str = sanitize_untrusted(body.get("template", ""), 2000)
 
-    logger.info("[PDF Detailed] Gerando para '%s' — %d vuln(s)", target, len(findings))
+    logger.info("[PDF Detailed] scan=%s alvo='%s' — %d vuln(s)",
+                body.get("scan_id"), data["target"], len(data["findings"]))
 
-    narrative = _generate_narrative(target, findings, exec_risks, score, instructions, template_str)
+    narrative = _generate_narrative(data["target"], data["findings"],
+                                    data["exec_risks"], data["score"],
+                                    instructions, template_str)
     if not narrative:
         logger.warning("[PDF Detailed] AEGIS sem resposta, gerando sem narrativa.")
 
     try:
-        pdf_bytes = build_detailed_pdf(target, findings, exec_risks, score, narrative)
+        pdf_bytes = build_detailed_pdf(
+            data["target"], data["findings"], data["exec_risks"], data["score"],
+            narrative, watermark=data["watermark"], provenance=data["provenance"],
+        )
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:

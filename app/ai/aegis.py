@@ -231,7 +231,8 @@ class Aegis:
 
     @property
     def online(self) -> bool:
-        return self._client is not None
+        from app.features import enabled
+        return enabled("ai") and self._client is not None
 
     @property
     def model(self) -> str:
@@ -253,6 +254,9 @@ class Aegis:
     def test_key(self, api_key: str, model: Optional[str] = None,
                  base_url: Optional[str] = None, prompt: Optional[str] = None) -> dict:
         """Faz uma chamada curta de verificação SEM alterar o singleton/estado."""
+        from app.features import enabled
+        if not enabled("ai"):
+            return {"ok": False, "error": "IA desabilitada neste ambiente."}
         model = (model or self._model).strip()
         base_url = (base_url or GROQ_BASE_URL).strip() or GROQ_BASE_URL
         prompt = (prompt or "").strip() or "Responda em uma frase: confirme que você é o AEGIS e está operacional."
@@ -311,7 +315,7 @@ class Aegis:
         return self.status()
 
     def call(self, system: str, prompt: str, max_tokens: int = 1024, retries: int = 3) -> Optional[dict]:
-        if not self._client:
+        if not self.online:
             return None
         for attempt in range(retries):
             try:
@@ -359,57 +363,22 @@ class Aegis:
 
     @staticmethod
     def offline_exec(vuln: dict) -> dict:
-        t = (vuln.get("title") or "").lower()
-        if "mqtt" in t or "scada" in t or "ot" in t:
-            impact = "R$ 8.7M–22M"
-            risk = "Sabotagem de infraestrutura OT/IoT — interrupção operacional"
-        elif "sql" in t or "banco" in t or "elastic" in t or "mongo" in t:
-            impact = "R$ 6.2M–50M"
-            risk = "Exfiltração de dados pessoais — violação LGPD"
-        elif "smb" in t or "ntlm" in t or "eternal" in t:
-            impact = "R$ 5.1M–15M"
-            risk = "Comprometimento de domínio — impacto em toda a rede"
-        elif "credencial" in t or "padrão" in t or "senha" in t:
-            impact = "R$ 3.8M–12M"
-            risk = "Acesso não autorizado via credencial padrão"
-        else:
-            impact = "R$ 2.5M–8M"
-            risk = f"Exposição de ativo crítico em {vuln.get('host')}:{vuln.get('port')}"
-
         return {
-            "rationale": (
-                f"A vulnerabilidade '{vuln.get('title')}' no ativo {vuln.get('host')}:{vuln.get('port')} "
-                f"expõe a organização a prejuízo estimado em {impact}. "
-                f"Risco: {risk}. Probabilidade de exploração ativa: Alta."
-            ),
-            "financial_impact": impact,
-            "regulatory_risk": "LGPD Art. 52 / ISO 27001 Controle A.12.6 / PCI-DSS 6.3",
-            "email": (
-                f"Assunto: [URGENTE] Vulnerabilidade Crítica Identificada — Ação Imediata Necessária\n\n"
-                f"Prezado(a) CTO/CEO,\n\n"
-                f"Nossa plataforma CYMAG identificou a vulnerabilidade '{vuln.get('title')}' "
-                f"no ativo {vuln.get('host')}:{vuln.get('port')} (severidade: {vuln.get('sev','N/A').upper()}).\n\n"
-                f"Impacto financeiro estimado: {impact} ({risk}).\n\n"
-                f"Solicito aprovação para isolamento imediato do ativo e início do processo de remediação.\n\n"
-                f"Referência CYMAG: {vuln.get('cve','N/A')} | CVSS: {vuln.get('cvss', 0)}\n\n"
-                f"Atenciosamente,\nEquipe de Segurança da Informação"
-            ),
+            "rationale": "Registro técnico requer validação e contexto do ativo. Não comprova exploração ou impacto financeiro.",
+            "financial_impact": "Não estimado: dados de negócio insuficientes.",
+            "regulatory_risk": "Não avaliado; este registro não comprova conformidade ou infração.",
+            "email": "Assunto: Revisão de registro técnico\n\nSolicitamos validar a evidência, a necessidade de exposição do serviço e as medidas adequadas ao ativo.",
         }
 
     @staticmethod
     def offline_exec_risk(vuln: dict) -> dict:
-        t = (vuln.get("title") or "").lower()
-        if "mqtt" in t or "scada" in t:
-            return {"risk": "Sabotagem OT/IoT", "category": "Operações", "impact": "R$ 8.7M", "probability": "Muito Alta"}
-        if "sql" in t or "injection" in t:
-            return {"risk": "Exfiltração DB — LGPD", "category": "Compliance", "impact": "R$ 12.4M", "probability": "Alta"}
-        if "redis" in t or "mongo" in t or "elastic" in t:
-            return {"risk": "Exposição de dados — LGPD", "category": "Dados", "impact": "R$ 6.2M", "probability": "Alta"}
-        if "smb" in t or "ntlm" in t or "eternal" in t:
-            return {"risk": "Comprometimento de domínio", "category": "Identidade", "impact": "R$ 5.1M", "probability": "Alta"}
-        if "credencial" in t or "padrão" in t:
-            return {"risk": "Acesso não autorizado", "category": "Identidade", "impact": "R$ 3.8M", "probability": "Muito Alta"}
-        return {"risk": "Exposição de ativo crítico", "category": "Tecnologia", "impact": "R$ 2.5M", "probability": "Média"}
+        return {
+            "risk": "Registro técnico a contextualizar",
+            "category": "Tecnologia",
+            "impact": "Não estimado",
+            "probability": "Não avaliada",
+            "verification_status": vuln.get("verification_status", "unclassified"),
+        }
 
 
 # Singleton — inicializado no factory (create_app)

@@ -12,7 +12,19 @@ def current_user():
     uid = session.get("uid")
     if not uid:
         return None
-    return db.get_user(uid)
+    user = db.get_user(uid)
+    return user if user and user["active"] else None
+
+
+def current_account_id():
+    """account_id (tenant) do usuário logado, revalidado no banco. None se sem conta.
+
+    É a chave de isolamento multiempresa: toda query de recurso de cliente filtra
+    por este valor. Lê do banco (não da sessão) para refletir remoção/alteração."""
+    user = current_user()
+    if not user or "account_id" not in user.keys():
+        return None
+    return user["account_id"]
 
 
 def current_plan():
@@ -24,8 +36,9 @@ def current_plan():
 
 
 def is_staff() -> bool:
-    """True se o usuário logado é da equipe CYMAG (entrega serviços gerenciados)."""
-    return session.get("role") in db.STAFF_ROLES
+    """True se o usuário logado é da equipe CYMAG. Revalida o papel no banco."""
+    user = current_user()
+    return bool(user) and user["role"] in db.STAFF_ROLES
 
 
 def requires_feature(feature: str):
@@ -33,7 +46,7 @@ def requires_feature(feature: str):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            if not session.get("uid"):
+            if not current_user():
                 return jsonify({"error": "Não autenticado"}), 401
             plan = current_plan()
             if not plan.has(feature):
@@ -53,11 +66,11 @@ def enforce_scan_quota(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         uid = session.get("uid")
-        if not uid:
+        if not current_user():
             return jsonify({"error": "Não autenticado"}), 401
         limit = current_plan().scans_per_month
         if limit is not None:
-            used = db.count_scans_this_month(uid)
+            used = db.count_scans_this_month(current_account_id())
             if used >= limit:
                 return jsonify({
                     "error": f"Limite de {limit} scan(s)/mês do seu plano atingido.",
@@ -70,8 +83,10 @@ def enforce_scan_quota(fn):
 def login_required(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get("uid"):
+        if not current_user():
             return jsonify({"error": "Não autenticado"}), 401
+        if current_account_id() is None:
+            return jsonify({"error": "Usuário sem organização associada"}), 403
         return fn(*args, **kwargs)
     return wrapper
 
@@ -80,9 +95,12 @@ def role_required(*roles):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            role = session.get("role")
-            if not session.get("uid"):
+            # Revalida o papel no banco (não confia só na sessão): usuário removido
+            # ou desativado, ou com papel alterado, é barrado na hora.
+            user = current_user()
+            if not user:
                 return jsonify({"error": "Não autenticado"}), 401
+            role = user["role"]
             if role not in roles and role != "admin":
                 return jsonify({"error": "Acesso negado para o seu perfil"}), 403
             return fn(*args, **kwargs)
@@ -91,4 +109,5 @@ def role_required(*roles):
 
 
 def client_ip() -> str:
-    return request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    # No trusted reverse proxy is configured. Header values are attacker-controlled.
+    return request.remote_addr or ""

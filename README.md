@@ -1,3 +1,5 @@
+> ASTRO Cyber ? estado atual (2026-10-10): frontend monocromatico com SVG oficial, dashboard de dados persistidos e scanner restrito ao inventario TCP defensivo. Checks de exploracao e planejamento de ataque do autonomo estao desativados. As descricoes abaixo documentam o legado e podem nao refletir o perfil ativo. Consulte docs/agents/ARCHITECTURE.md, SECURITY.md e TASKS.md para capacidades e pendencias atuais. Nao declarar producao pronta ou cobertura de pentest completo.
+
 <div align="center">
 
 # 🛡️ CYMAG Enterprise

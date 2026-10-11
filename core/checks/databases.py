@@ -34,8 +34,9 @@ class MySQLCheck(ServiceCheck):
                 conn.close()
                 return [make_finding(
                     f"MySQL — Credencial Padrão Ativa ({user}/{passwd or 'sem senha'})",
-                    f"Login MySQL bem-sucedido com '{user}:{passwd or '(vazio)'}'. Acesso total ao banco de dados.",
+                    f"Login MySQL aceito com {user}:{passwd or '(vazio)'}. Privilegios e acesso a dados nao foram verificados.",
                     "crit", 9.8, "CWE-798",
+                    verification_status="confirmed", confidence="high",
                     evidence=f"Conexão aceita: {user}:{passwd or '(vazio)'}", banner=raw_banner,
                 )]
             except ImportError:
@@ -47,9 +48,10 @@ class MySQLCheck(ServiceCheck):
             for old in ["5.5.", "5.6.", "5.0.", "4."]:
                 if old in raw_banner:
                     return [make_finding(
-                        "MySQL End-of-Life Detectado",
-                        f"Versão MySQL sem suporte ativo de segurança. Banner: {raw_banner[:80]}",
-                        "crit", 9.8, "CVE-2016-6662", evidence=raw_banner[:200], banner=raw_banner,
+                        "Indicio de versao MySQL antiga no banner",
+                        f"Banner sugere versao MySQL antiga: {raw_banner[:80]}. Versao, correcoes e eventual CVE requerem validacao.",
+                        "med", 5.0, "", evidence=raw_banner[:200], banner=raw_banner,
+                        verification_status="suspected", confidence="low",
                     )]
         return []
 
@@ -70,9 +72,10 @@ class RedisCheck(ServiceCheck):
             return []
         version, info_raw = result
         return [make_finding(
-            "Redis Sem Autenticação",
-            f"Redis v{version} respondeu PONG sem credenciais. Acesso irrestrito ao banco de dados em memória.",
-            "crit", 9.8, "CVE-2022-0543",
+            "Redis respondeu a PING sem credenciais",
+            f"Redis v{version} respondeu PONG sem credenciais. Acesso a dados e CVE-2022-0543 nao foram comprovados; permissoes e ambiente requerem validacao.",
+            "med", 5.0, "",
+            verification_status="observation", confidence="medium",
             evidence=f"PING → +PONG\n{info_raw[:300]}", banner=f"Redis {version}",
         )]
 
@@ -118,9 +121,10 @@ class MongoDBCheck(ServiceCheck):
             s.close()
             if resp and len(resp) > 20:
                 return [make_finding(
-                    "MongoDB Sem Autenticação",
-                    "MongoDB respondeu ao handshake sem credenciais. Possível acesso total a todos os databases.",
-                    "crit", 9.8, "CWE-306",
+                    "Possivel servico MongoDB - resposta ao handshake",
+                    "Resposta recebida apos handshake MongoDB sem credenciais. Handshake nao comprova acesso sem autenticacao a bancos ou dados; requer validacao.",
+                    "low", 3.0, "CWE-306",
+                    verification_status="observation", confidence="low",
                     evidence=f"Wire protocol response: {len(resp)} bytes recebidos", banner=ctx.banner,
                 )]
         except Exception as e:
@@ -155,9 +159,10 @@ class ElasticsearchCheck(ServiceCheck):
         except Exception:
             pass
         return [make_finding(
-            "Elasticsearch Exposto Sem Autenticação",
-            f"Cluster '{cluster}' v{version} acessível sem credenciais. Todos os índices de dados expostos.",
-            "crit", 9.8, "CVE-2015-1427",
+            "Indicio de metadados Elasticsearch acessiveis",
+            f"Resposta HTTP contem metadados do cluster {cluster!r} v{version}. Acesso a indices, dados e eventual CVE requerem validacao.",
+            "med", 5.0, "",
+            verification_status="suspected", confidence="medium",
             evidence=f"Cluster: {cluster} | v{version}\n\nÍndices:\n{indices}", banner=f"Elasticsearch {version}",
         )]
 
@@ -185,7 +190,7 @@ class PostgresCheck(ServiceCheck):
                 return [make_finding(
                     "PostgreSQL Acessível na Rede",
                     "Porta PostgreSQL respondeu ao startup. Verifique credenciais padrão (postgres/postgres, postgres/admin).",
-                    "med", 6.5, "CWE-521",
+                    "low", 3.0, "",
                     evidence=f"Startup response type: '{chr(resp[0])}' ({len(resp)} bytes)", banner=ctx.banner,
                 )]
         except Exception as e:

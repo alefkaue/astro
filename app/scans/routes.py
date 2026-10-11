@@ -8,8 +8,9 @@ from flask import Blueprint, jsonify, request, session
 from app import db
 from app.ai.aegis import (AEGIS_EXEC, AEGIS_SECOPS, aegis, calc_score,
                           sanitize_finding, sanitize_untrusted)
-from app.auth.decorators import (current_plan, enforce_scan_quota,
-                                 login_required, requires_feature, role_required)
+from app.auth.decorators import (current_account_id, current_plan,
+                                 enforce_scan_quota, login_required,
+                                 requires_feature, role_required)
 from app.scans.network import detect_local_subnets
 from app.scope import ScopeError, resolve_authorized_target
 from core.exploit_engine import ExploitEngine
@@ -30,6 +31,7 @@ def api_areas():
 
 @scans_bp.route("/api/scan", methods=["POST"])
 @login_required
+@role_required("operator", "cymag")
 @enforce_scan_quota
 def api_scan():
     """Scan completo: descoberta → port scan → exploit/enum → risco executivo.
@@ -39,9 +41,11 @@ def api_scan():
     """
     body = request.get_json(force=True) or {}
     uid = session.get("uid")
+    account_id = current_account_id()
 
     try:
-        eng, target = resolve_authorized_target(body.get("engagement_id"), body.get("target", ""))
+        eng, target = resolve_authorized_target(
+            account_id, body.get("engagement_id"), body.get("target", ""))
     except ScopeError as e:
         db.audit(uid, "scan_denied", f"reason={e.message}", request.remote_addr or "")
         return jsonify({"error": e.message}), e.status
@@ -49,7 +53,8 @@ def api_scan():
     scope = eng.get("scope") or []
     logger.info("[/api/scan] Iniciando para alvo: %s (user %s, eng %s)", target, uid, eng["id"])
 
-    scan_id = db.create_scan(target, created_by=uid, engagement_id=eng["id"])
+    scan_id = db.create_scan(target, created_by=uid, engagement_id=eng["id"],
+                             account_id=account_id)
     db.audit(uid, "scan_start", f"scan={scan_id} eng={eng['id']} target={target}",
              request.remote_addr or "")
 
@@ -221,27 +226,32 @@ def api_auto_discover():
 @scans_bp.route("/api/scans")
 @login_required
 def api_scans():
-    """Lista os scans do usuário atual (histórico persistente)."""
-    return jsonify({"scans": db.list_scans(limit=50, created_by=session.get("uid"))})
+    """Lista os scans do TENANT (histórico persistente, isolado por conta)."""
+    return jsonify({"scans": db.list_scans(limit=50, account_id=current_account_id())})
 
 
 @scans_bp.route("/api/scans/<int:scan_id>/findings")
 @login_required
 def api_scan_findings(scan_id: int):
-    """Retorna os achados de um scan específico."""
-    return jsonify({"scan_id": scan_id, "findings": db.get_scan_findings(scan_id)})
+    """Achados de um scan — só se o scan pertencer ao tenant do usuário (senão 404)."""
+    findings = db.get_scan_findings(scan_id, account_id=current_account_id())
+    if findings is None:
+        return jsonify({"error": "Scan não encontrado."}), 404
+    return jsonify({"scan_id": scan_id, "findings": findings})
 
 
 # ─── VALIDAÇÃO HUMANA (plano Gerenciado+) ───────────────────────────────────────
 
 @scans_bp.route("/api/reviews")
+@login_required
 @role_required("cymag")
 def api_review_queue():
     """Fila de scans aguardando validação humana (analista/admin)."""
-    return jsonify({"queue": db.list_review_queue()})
+    return jsonify({"queue": db.list_review_queue(account_id=current_account_id())})
 
 
 @scans_bp.route("/api/scans/<int:scan_id>/review", methods=["POST"])
+@login_required
 @role_required("cymag")
 def api_submit_review(scan_id: int):
     """Analista valida um scan: marca como 'reviewed' ou assina o laudo ('signed')."""
@@ -250,12 +260,13 @@ def api_submit_review(scan_id: int):
     if status not in ("reviewed", "signed"):
         return jsonify({"error": "status deve ser 'reviewed' ou 'signed'."}), 400
 
-    scan = db.get_scan(scan_id)
+    scan = db.get_scan(scan_id, account_id=current_account_id())
     if not scan:
         return jsonify({"error": "Scan não encontrado."}), 404
 
     uid = session.get("uid")
     notes = (body.get("notes") or "").strip()
-    db.set_review_status(scan_id, status, reviewed_by=uid, notes=notes)
+    if not db.review_scan_scoped(scan_id, current_account_id(), status, uid, notes):
+        return jsonify({"error": "Avaliação não concluída ou transição de revisão inválida."}), 409
     db.audit(uid, "scan_review", f"scan={scan_id} status={status}", request.remote_addr or "")
     return jsonify({"scan_id": scan_id, "review_status": status, "reviewed_by": uid})

@@ -56,3 +56,38 @@ def test_sort_key_puts_critical_first():
     ordered = sorted(findings, key=business.sort_key)
     assert ordered[0]["sev"] == "crit"
     assert ordered[-1]["sev"] == "low"
+
+
+# ─── DET-001: honestidade dos valores financeiros ─────────────────────────────
+
+def test_business_item_marks_values_as_estimate():
+    item = business.business_item(_f())
+    assert item["is_estimate"] is True
+    disc = item["estimate_disclaimer"].lower()
+    assert "estimativa" in disc and "hipotéticas" in disc
+
+
+def test_summarize_marks_values_as_estimate():
+    s = business.summarize([_f()])
+    assert s["is_estimate"] is True
+    assert s["estimate_disclaimer"]
+
+
+def test_no_guaranteed_loss_language_in_module():
+    # Nenhum texto pode afirmar perda/economia como CERTA.
+    import inspect
+
+    src = inspect.getsource(business).lower()
+    for forbidden in ("garantido", "economia garantida", "você vai perder", "voce vai perder"):
+        assert forbidden not in src, f"linguagem proibida encontrada: {forbidden}"
+
+
+def test_public_keys_consumed_by_owner_routes_preserved():
+    # app/owner/routes.py consome estas chaves — não podem sumir.
+    item = business.business_item(_f(), finding_id=1)
+    for k in ("finding_id", "title", "area_label", "severity", "loss_label", "fix_cost_label"):
+        assert k in item
+    s = business.summarize([_f()])
+    for k in ("by_severity", "total", "pending", "authorized", "dismissed",
+              "open_loss_label", "open_fix_label", "authorized_budget"):
+        assert k in s

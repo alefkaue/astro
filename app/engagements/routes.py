@@ -12,7 +12,8 @@ import logging
 from flask import Blueprint, jsonify, request, session
 
 from app import db
-from app.auth.decorators import is_staff, login_required, role_required
+from app.auth.decorators import (current_account_id, is_staff, login_required,
+                                 role_required)
 # Regras de escopo centralizadas em app/scope.py (fonte única, reusada pelo
 # scan manual e pelo motor autônomo). Reexportadas aqui por retrocompat.
 from app.scope import target_in_scope, valid_scope
@@ -26,11 +27,12 @@ engagements_bp = Blueprint("engagements", __name__)
 @engagements_bp.route("/api/engagements", methods=["GET"])
 @login_required
 def list_engagements():
-    return jsonify({"engagements": db.list_engagements()})
+    # Isolamento: só os engagements do tenant do usuário.
+    return jsonify({"engagements": db.list_engagements(current_account_id())})
 
 
 @engagements_bp.route("/api/engagements", methods=["POST"])
-@login_required
+@role_required("owner", "operator", "cymag", "admin")
 def create_engagement():
     body = request.get_json(force=True) or {}
     name = (body.get("name") or "").strip()
@@ -46,27 +48,37 @@ def create_engagement():
     if not ok:
         return jsonify({"error": msg}), 400
 
-    eid = db.create_engagement(name, client, scope, created_by=session.get("uid"))
+    account_id = current_account_id()
+    if account_id is None:
+        return jsonify({"error": "Usuário sem conta associada."}), 403
+
+    eid = db.create_engagement(name, client, scope, created_by=session.get("uid"),
+                               account_id=account_id)
     db.audit(session.get("uid"), "engagement_create", f"id={eid} name={name}")
-    return jsonify(db.get_engagement(eid)), 201
+    return jsonify(db.get_engagement(eid, account_id=account_id)), 201
 
 
 @engagements_bp.route("/api/engagements/<int:eid>", methods=["GET"])
 @login_required
 def get_engagement(eid: int):
-    eng = db.get_engagement(eid)
+    # Isolamento: engagement de outro tenant responde 404 (não revela existência).
+    eng = db.get_engagement(eid, account_id=current_account_id())
     if not eng:
         return jsonify({"error": "Engagement não encontrado."}), 404
     return jsonify(eng)
 
 
 @engagements_bp.route("/api/engagements/<int:eid>/authorize", methods=["POST"])
-@role_required("admin")
+@login_required
+@role_required("owner", "admin")
 def authorize_engagement(eid: int):
-    """Somente admin pode autorizar — libera operações automatizadas no escopo."""
-    eng = db.get_engagement(eid)
+    """Autoriza o engagement — libera operações no escopo. Sempre dentro do tenant:
+    owner/admin só autoriza contrato da PRÓPRIA conta (engagement de outro tenant → 404).
+    Autorização cross-tenant pela equipe (serviço gerenciado) é exceção auditada, adiada."""
+    eng = db.get_engagement(eid, account_id=current_account_id())
     if not eng:
         return jsonify({"error": "Engagement não encontrado."}), 404
-    db.authorize_engagement(eid, authorized_by=session.get("uid"))
+    if not db.authorize_engagement(eid, authorized_by=session.get("uid"), account_id=current_account_id()):
+        return jsonify({"error": "Engagement não encontrado."}), 404
     db.audit(session.get("uid"), "engagement_authorize", f"id={eid}")
-    return jsonify(db.get_engagement(eid))
+    return jsonify(db.get_engagement(eid, account_id=current_account_id()))

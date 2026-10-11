@@ -3,9 +3,10 @@
 import logging
 
 from flask import Blueprint, jsonify, request, session
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app import db
+from app.auth import ratelimit
 from app.auth.decorators import (client_ip, current_user, login_required,
                                  role_required)
 from core import plans
@@ -13,6 +14,7 @@ from core import plans
 logger = logging.getLogger("cymag.auth")
 
 auth_bp = Blueprint("auth", __name__)
+_DUMMY_PASSWORD_HASH = generate_password_hash("login-dummy-password")
 
 
 def _user_view(role: str) -> str:
@@ -64,11 +66,23 @@ def login():
     email = (body.get("email") or "").strip().lower()
     password = body.get("password") or ""
 
+    ip = client_ip()
+    retry_after = ratelimit.limiter.retry_after(email, ip)
+    if retry_after:
+        db.audit(None, "login_rate_limited", f"email={email}", ip)
+        response = jsonify({"error": "Muitas tentativas. Tente novamente mais tarde."})
+        response.headers["Retry-After"] = str(retry_after)
+        return response, 429
+
     user = db.get_user_by_email(email)
-    if not user or not check_password_hash(user["password_hash"], password):
+    valid_password = check_password_hash(
+        user["password_hash"] if user else _DUMMY_PASSWORD_HASH, password)
+    if not user or not valid_password:
+        ratelimit.limiter.record_failure(email, ip)
         db.audit(None, "login_failed", f"email={email}", client_ip())
         return jsonify({"error": "Credenciais inválidas"}), 401
 
+    ratelimit.limiter.clear_email(email)
     session.clear()
     session["uid"] = user["id"]
     session["role"] = user["role"]

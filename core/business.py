@@ -95,14 +95,28 @@ def _scale(rng: Tuple[int, int], factor: float) -> Tuple[int, int]:
     return (round(rng[0] * factor), round(rng[1] * factor))
 
 
+# Aviso obrigatório que acompanha QUALQUER valor em R$ devolvido por este módulo.
+# Os números são faixas heurísticas de ordem de grandeza para ajudar a PRIORIZAR,
+# não perda apurada nem economia assegurada.
+ESTIMATE_DISCLAIMER = (
+    "Estimativa de ordem de grandeza para priorização, não perícia contábil. "
+    "Valores são faixas hipotéticas, não perda apurada nem economia assegurada."
+)
+
+
 def loss_estimate(finding: Dict) -> Tuple[int, int]:
-    """Prejuízo estimado (min, max) em BRL se o problema NÃO for corrigido."""
+    """Faixa de prejuízo ESTIMADO (min, max) em BRL caso o problema não seja
+    corrigido. Heurística para priorização — ver `ESTIMATE_DISCLAIMER`."""
+    if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info":
+        return (0, 0)
     f = _SEV_LOSS.get(finding.get("sev", "info"), 0.2)
     return _scale(_area(finding)["loss"], f)
 
 
 def fix_cost(finding: Dict) -> Tuple[int, int]:
     """Custo estimado (min, max) em BRL para corrigir o problema."""
+    if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info":
+        return (0, 0)
     f = _SEV_FIX.get(finding.get("sev", "info"), 0.5)
     return _scale(_area(finding)["fix_cost"], f)
 
@@ -136,10 +150,13 @@ def business_item(finding: Dict, finding_id: Optional[int] = None) -> Dict:
         "severity_label": _SEV_PT.get(finding.get("sev", "info"), "Informativo"),
         "host": finding.get("host"),
         "port": finding.get("port"),
-        "problem": area["problem"],
+        "problem": "Serviço observado; requer validação de contexto e necessidade de exposição." if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info" else area["problem"],
         "fix": area["fix"],
-        "loss_min": loss[0], "loss_max": loss[1], "loss_label": brl_range(loss),
-        "fix_cost_min": fix[0], "fix_cost_max": fix[1], "fix_cost_label": brl_range(fix),
+        "loss_min": loss[0], "loss_max": loss[1], "loss_label": brl_range(loss) if loss != (0, 0) else "Não estimado",
+        "fix_cost_min": fix[0], "fix_cost_max": fix[1], "fix_cost_label": brl_range(fix) if fix != (0, 0) else "Não estimado",
+        # Honestidade (DET-001): todo valor em R$ é explicitamente marcado como estimativa.
+        "is_estimate": True,
+        "estimate_disclaimer": ESTIMATE_DISCLAIMER,
     }
 
 
@@ -190,6 +207,9 @@ def summarize(findings: List[Dict]) -> Dict:
         "open_fix_label": brl_range((open_fix_min, open_fix_max)),
         "authorized_budget": authorized_budget,
         "authorized_budget_label": brl_short(authorized_budget),
+        # Honestidade (DET-001): a exposição agregada é estimativa, não perda apurada.
+        "is_estimate": True,
+        "estimate_disclaimer": ESTIMATE_DISCLAIMER,
     }
 
 

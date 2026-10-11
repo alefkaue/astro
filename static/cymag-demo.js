@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   CYMAG Enterprise — Camada de DEMONSTRAÇÃO (100% client-side)
+   ASTRO Cyber — Camada de DEMONSTRAÇÃO (100% client-side)
 
    Objetivo: a plataforma inteira funciona NO NAVEGADOR, sem backend Flask e
    sem nenhuma chamada de IA paga. É isto que permite hospedar o projeto de
@@ -57,7 +57,7 @@
     gerenciado:   { key: "gerenciado", name: "Gerenciado", price_month: 3900, price_year: 39000,
       autonomous: true, ai: true, training: true, managed: true,
       scans_per_month: null, max_ips: null, report_level: "signed", managed_cadence_days: 60,
-      tagline: "A CYMAG faz o pentest a cada 2 meses e assina o laudo (LGPD/ISO/PCI).", audience: "PME que precisa de laudo e acompanhamento recorrente" },
+      tagline: "A ASTRO Cyber faz o pentest a cada 2 meses e assina o laudo (LGPD/ISO/PCI).", audience: "PME que precisa de laudo e acompanhamento recorrente" },
     enterprise:   { key: "enterprise", name: "Enterprise", price_month: 6000, price_year: 72000,
       autonomous: true, ai: true, training: true, managed: true,
       scans_per_month: null, max_ips: null, report_level: "white_label", managed_cadence_days: 30,
@@ -173,7 +173,7 @@
     return {
       rationale: `A vulnerabilidade '${v.title}' no ativo ${v.host}:${v.port} expõe a organização a prejuízo estimado em ${r.impact}. Risco: ${r.risk}. Probabilidade de exploração ativa: ${r.probability}.`,
       financial_impact: r.impact, regulatory_risk: "LGPD Art. 52 / ISO 27001 A.12.6 / PCI-DSS 6.3",
-      email: `Assunto: [URGENTE] Vulnerabilidade Crítica Identificada — Ação Imediata Necessária\n\nPrezado(a) CTO/CEO,\n\nNossa plataforma CYMAG identificou a vulnerabilidade '${v.title}' no ativo ${v.host}:${v.port} (severidade: ${(v.sev || "N/A").toUpperCase()}).\n\nImpacto financeiro estimado: ${r.impact} (${r.risk}).\n\nSolicito aprovação para isolamento imediato do ativo e início do processo de remediação.\n\nReferência: ${v.cve || "N/A"} | CVSS: ${v.cvss || 0}\n\nAtenciosamente,\nEquipe de Segurança da Informação`,
+      email: `Assunto: [URGENTE] Vulnerabilidade Crítica Identificada — Ação Imediata Necessária\n\nPrezado(a) CTO/CEO,\n\nNossa plataforma ASTRO Cyber identificou a vulnerabilidade '${v.title}' no ativo ${v.host}:${v.port} (severidade: ${(v.sev || "N/A").toUpperCase()}).\n\nImpacto financeiro estimado: ${r.impact} (${r.risk}).\n\nSolicito aprovação para isolamento imediato do ativo e início do processo de remediação.\n\nReferência: ${v.cve || "N/A"} | CVSS: ${v.cvss || 0}\n\nAtenciosamente,\nEquipe de Segurança da Informação`,
     };
   }
   function offlineChain(findings) {
@@ -267,8 +267,8 @@
     owner:    { id: 2, email: "dono@pme.com",        name: "Ana — Dona da PME",       role: "owner",    view: "owner",     is_staff: false, account: { id: 2, name: "PME Demo Ltda" } },
     operator: { id: 3, email: "ti@pme.com",          name: "Bruno — Analista de TI",  role: "operator", view: "secops",    is_staff: false, account: { id: 2, name: "PME Demo Ltda" } },
     viewer:   { id: 7, email: "diretoria@pme.com",   name: "Diretoria",               role: "viewer",   view: "executive", is_staff: false, account: { id: 2, name: "PME Demo Ltda" } },
-    cymag:    { id: 4, email: "consultor@cymag.com", name: "Consultor CYMAG",         role: "cymag",    view: "secops",    is_staff: true,  account: { id: 1, name: "CYMAG (equipe)" } },
-    admin:    { id: 1, email: "admin@cymag.com",     name: "Administrador",           role: "admin",    view: "secops",    is_staff: true,  account: { id: 1, name: "CYMAG (equipe)" } },
+    cymag:    { id: 4, email: "consultor@cymag.com", name: "Consultor ASTRO",         role: "cymag",    view: "secops",    is_staff: true,  account: { id: 1, name: "ASTRO (equipe)" } },
+    admin:    { id: 1, email: "admin@cymag.com",     name: "Administrador",           role: "admin",    view: "secops",    is_staff: true,  account: { id: 1, name: "ASTRO (equipe)" } },
   };
 
   /* ─────────────────────────────────────────────────────────────────────
@@ -302,6 +302,15 @@
     { id: 1000, target: "192.168.0.10", status: "done", risk_score: 41, findings_count: 3, started_at: addDaysISO(-8), finished_at: addDaysISO(-8), review_status: "none" },
     { id: 999, target: "192.168.0.40", status: "done", risk_score: 22, findings_count: 2, started_at: addDaysISO(-20), finished_at: addDaysISO(-20), review_status: "none" },
   ];
+  const INITIAL_HISTORY = clone(HISTORY);
+  const INITIAL_FINDINGS = {1001:clone(FINDINGS),1000:clone(FINDINGS.slice(0,3)),999:clone(FINDINGS.slice(0,2))};
+  if (Array.isArray(ST.assessmentHistory)) HISTORY.splice(0,HISTORY.length,...ST.assessmentHistory);
+  const findingsByScan = Object.assign({},INITIAL_FINDINGS,ST.assessmentFindings || {});
+  function saveAssessments() {
+    ST.assessmentHistory = HISTORY;
+    ST.assessmentFindings = findingsByScan;
+    save();
+  }
 
   function currentUser() {
     const u = clone(USERS[ST.role] || USERS.owner);
@@ -448,11 +457,20 @@
     if (url === "/api/areas") return { areas: clone(AREAS_SEED) };
     if (url === "/api/auto_discover") return { subnets: [{ subnet: "192.168.0.0/24" }, { subnet: "10.0.0.0/24" }] };
     if (url === "/api/scans") return { scans: clone(HISTORY) };
+    const assessmentM = url.match(/^\/api\/assessments\/(\d+)$/);
+    if (assessmentM) {
+      const id = Number(assessmentM[1]);
+      const assessment = HISTORY.find(s => s.id === id);
+      if (!assessment) return reject(404,"Avaliação de demonstração não encontrada.");
+      const findings = findingsByScan[id] || [];
+      return { assessment:clone(assessment), findings:clone(findings), source:"synthetic_demo",
+        coverage:{status:"not_measured",limitations:["DEMONSTRAÇÃO — dados sintéticos, nenhuma conexão realizada."]} };
+    }
     const sfM = url.match(/^\/api\/scans\/(\d+)\/findings$/);
     if (sfM) {
       const id = Number(sfM[1]);
-      if (id === SCAN.id) return { scan_id: id, findings: clone(FINDINGS) };
-      return { scan_id: id, findings: clone(FINDINGS.slice(0, id === 1000 ? 3 : 2)) };
+      if (!HISTORY.some(s => s.id === id)) return reject(404,"Avaliação de demonstração não encontrada.");
+      return { scan_id: id, findings: clone(findingsByScan[id] || []) };
     }
     const revM = url.match(/^\/api\/scans\/(\d+)\/review$/);
     if (revM && method === "POST") return { scan_id: Number(revM[1]), review_status: body.status, reviewed_by: currentUser().id };
@@ -460,11 +478,32 @@
       { id: 1001, target: SCAN_TARGET, findings_count: FINDINGS.length, risk_score: SCAN.risk_score, finished_at: SCAN.finished_at, started_at: SCAN.started_at },
     ] };
 
+    if (url === "/api/dashboard") {
+      const latest = HISTORY.filter((scan, index) => scan.status === "done" && HISTORY.findIndex(s => s.status === "done" && s.target === scan.target) === index);
+      const findings = latest.flatMap(s => findingsByScan[s.id] || []);
+      const severity = { crit:0, high:0, med:0, low:0, info:0 };
+      findings.forEach(f => severity[f.sev in severity ? f.sev : "info"]++);
+      const count = status => findings.filter(f => f.verification_status === status).length;
+      return { source:"synthetic_demo", generated_at:new Date().toISOString(),
+        counts:{ assessments:HISTORY.length, running:HISTORY.filter(s => s.status === "running").length,
+          completed:HISTORY.filter(s => s.status === "done").length, failed:HISTORY.filter(s => s.status === "error").length,
+          observed_hosts:new Set(findings.map(f => f.host).filter(Boolean)).size,
+          confirmed:count("confirmed"), pending_validation:count("suspected"), observations:count("observation"),
+          unclassified:findings.filter(f => !["confirmed","suspected","observation"].includes(f.verification_status)).length },
+        severity, recent:clone(HISTORY.slice(0,8)),
+        coverage:"DEMO — achados sintéticos da última avaliação de cada alvo; não representa um inventário real.",
+        limitations:["Nenhuma conexão aos ativos é realizada.","Dados demonstrativos não comprovam vulnerabilidades ou correções."] };
+    }
+
     if (url === "/api/scan" && method === "POST") {
       const target = body.target || "192.168.0.0/24";
       const list = clone(findingsForTarget(target));
       const aiOn = currentUser().plan.ai;
-      return { scan_id: SCAN.id, target, engagement_id: body.engagement_id || 1,
+      const id = Math.max(...HISTORY.map(s => s.id))+1;
+      HISTORY.unshift({id,target,engagement_id:body.engagement_id || 1,status:"done",risk_score: riskScore(list),findings_count:list.length,started_at:nowISO(),finished_at:nowISO()});
+      findingsByScan[id] = list;
+      saveAssessments();
+      return { scan_id: id, target, engagement_id: body.engagement_id || 1,
         cyber_vulns: list, exec_risks: execRisksFor(list), risk_score: riskScore(list), ai_enabled: aiOn, review_status: "none" };
     }
 
@@ -474,10 +513,12 @@
       const list = clone(findingsForTarget(target));
       const aiOn = currentUser().plan.ai;
       const runId = "demo-" + Date.now();
+      const id = Math.max(...HISTORY.map(s => s.id))+1;
+      HISTORY.unshift({id,target,engagement_id:body.engagement_id || 1,status:"running",findings_count:0,started_at:nowISO(),finished_at:null});
       ST.runs[runId] = { startedAt: Date.now(), events: buildRunEvents(target, list, aiOn), target,
-        report: runReport(target, list, aiOn), scanId: SCAN.id };
-      // não persistimos runs no localStorage (voláteis); guardamos em memória
-      return { run_id: runId, scan_id: SCAN.id, target, status: "running" };
+        report: runReport(target, list, aiOn), scanId: id };
+      saveAssessments();
+      return { run_id: runId, scan_id: id, target, status: "running" };
     }
     const runM = url.match(/^\/api\/autonomous\/([\w-]+)$/);
     if (runM) {
@@ -487,6 +528,10 @@
       const perEv = 650;                                   // ms por evento revelado
       const revealed = Math.min(r.events.length, Math.floor((Date.now() - r.startedAt) / perEv) + 2);
       const done = revealed >= r.events.length;
+      if (done) {
+        const scan = HISTORY.find(s => s.id === r.scanId);
+        if (scan) { scan.status="done"; scan.findings_count=r.report.findings.length; scan.risk_score=r.report.risk_score; scan.finished_at=scan.finished_at || nowISO(); findingsByScan[scan.id]=r.report.findings; saveAssessments(); }
+      }
       return { run_id: runM[1], status: done ? "done" : "running", target: r.target, scan_id: r.scanId,
         error: null, event_count: revealed, events: r.events.slice(since, revealed), report: done ? r.report : null };
     }
@@ -542,11 +587,11 @@
     get active() { return this._active; },
     _active: false,
     roles: ["owner", "operator", "viewer", "cymag", "admin"],
-    roleLabels: { owner: "Dono", operator: "Analista de TI", viewer: "Diretoria", cymag: "Equipe CYMAG", admin: "Admin" },
+    roleLabels: { owner: "Dono", operator: "Analista de TI", viewer: "Diretoria", cymag: "Equipe ASTRO", admin: "Admin" },
     get role() { return ST.role; },
     setRole(r) { if (USERS[r]) { ST.role = r; save(); } },
     enable() { this._active = true; },
     identity,
-    reset() { try { localStorage.removeItem(LS_KEY); } catch (e) {} Object.assign(ST, clone(DEFAULT_STATE)); ST.engagements = null; },
+    reset() { try { localStorage.removeItem(LS_KEY); } catch (e) {} for (const key of Object.keys(ST)) delete ST[key]; Object.assign(ST, clone(DEFAULT_STATE)); ST.engagements = [{id:1,name:"Rede do escritório",scope:[SCAN_TARGET],status:"authorized"}]; HISTORY.splice(0,HISTORY.length,...clone(INITIAL_HISTORY)); for (const key of Object.keys(findingsByScan)) delete findingsByScan[key]; Object.assign(findingsByScan,clone(INITIAL_FINDINGS)); saveAssessments(); },
   };
 })();

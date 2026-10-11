@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   CYMAG Enterprise — Frontend (Fase 5)
+   ASTRO Cyber — Frontend (Fase 5)
    SPA conectada a toda a API: auth, scan, autônomo, engagements, áreas,
    histórico, visão executiva e relatórios PDF.
 ═══════════════════════════════════════════════════════════════════════ */
@@ -12,7 +12,7 @@ const state = { user: null, lastScan: null, engagements: [], section: null, auto
 
 /* Feature liberada pelo plano DA CONTA (autonomous | ai | training | managed). */
 const hasFeature = (f) => !!(state.user && state.user.plan && state.user.plan[f]);
-const ROLE_LABEL = { owner: "Dono", operator: "Operador", viewer: "Executivo", cymag: "Equipe CYMAG", admin: "Admin" };
+const ROLE_LABEL = { owner: "Dono", operator: "Analista de TI", viewer: "Diretoria", cymag: "Equipe ASTRO", admin: "Admin" };
 
 /* ─── API ───
    Quando o modo demonstração está ativo (window.CYMAG_DEMO.active), toda chamada
@@ -22,7 +22,7 @@ function isDemo() { return !!(window.CYMAG_DEMO && window.CYMAG_DEMO.active); }
 
 async function api(path, { method = "GET", body = null } = {}) {
   if (isDemo()) return window.__demoApi(path, { method, body });
-  const opts = { method, headers: {} };
+  const opts = { method, headers: { "X-Requested-With": "ASTRO" } };  // SEC-009a: barreira CSRF
   if (body) { opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
   const r = await fetch(path, opts);
   if (r.status === 401) { if (state.user) { state.user = null; toast("Sessão expirada.", "err"); showLogin(); } throw new Error("unauthorized"); }
@@ -36,9 +36,28 @@ async function api(path, { method = "GET", body = null } = {}) {
 function toast(msg, kind = "info", ms = 3800) {
   const t = document.createElement("div");
   t.className = "toast " + kind; t.textContent = msg;
-  $("#toasts").appendChild(t);
+  $("#toasts").replaceChildren(t);
   setTimeout(() => t.remove(), ms);
 }
+function fieldError(id, message) {
+  const field = document.getElementById(id);
+  let error = document.getElementById(id + '-error');
+  if (!error) {
+    error = document.createElement('p'); error.id = id + '-error';
+    error.className = 'field-error'; error.setAttribute('role', 'alert');
+    field.insertAdjacentElement('afterend', error);
+    field.addEventListener('input', () => {
+      if ((field.type === 'checkbox' ? field.checked : field.value.trim() && field.validity.valid)) { error.textContent = ''; field.removeAttribute('aria-invalid'); }
+    });
+  }
+  const described = new Set((field.getAttribute('aria-describedby') || '').split(' ').filter(Boolean));
+  described.add(error.id); field.setAttribute('aria-describedby', [...described].join(' '));
+  error.textContent = message;
+  if (message) field.setAttribute('aria-invalid', 'true'); else field.removeAttribute('aria-invalid');
+}
+const CATEGORY_LABELS = {smb_ad:'Compartilhamento e domínio (SMB/AD)',iot_ot:'Dispositivos e tecnologia operacional (IoT/OT)',remote_access:'Acesso remoto',database:'Banco de dados',web:'Aplicações web'};
+const categoryLabel = value => CATEGORY_LABELS[value] || 'Outra categoria';
+const SCOPE_STATUS_LABELS = {authorized:'Autorizado',draft:'Rascunho',active:'Ativo',closed:'Encerrado'};
 function openModal(html, wide) { const m = $("#modal"); m.innerHTML = html; m.classList.toggle("wide", !!wide); $("#modal-back").classList.add("open"); }
 function closeModal() { $("#modal-back").classList.remove("open"); }
 $("#modal-back").addEventListener("click", e => { if (e.target.id === "modal-back") closeModal(); });
@@ -62,14 +81,14 @@ const icon = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" 
 
 const SECTION_META = {
   overview:    { title: "Painel", sub: "Visão geral da operação" },
-  scan:        { title: "Scan Manual", sub: "Descoberta e análise de um alvo" },
-  autonomous:  { title: "Pentester Autônomo", sub: "Operação automática dentro do escopo autorizado" },
+  scan:        { title: "Scanner", sub: "Inventário TCP defensivo em escopo autorizado" },
+  autonomous:  { title: "Scanner autônomo", sub: "Execução assíncrona · Inventário TCP · Sem exploração" },
   engagements: { title: "Engagements", sub: "Escopos autorizados de teste" },
   areas:       { title: "Áreas de Cobertura", sub: "Serviços verificados por área" },
   history:     { title: "Histórico", sub: "Scans persistidos" },
   exec:        { title: "Painel Executivo", sub: "Risco de negócio consolidado" },
   resumo:      { title: "Resumo", sub: "O que encontramos, o risco e o que decidir — em português" },
-  central:     { title: "Central CYMAG", sub: "Entrega dos pentests gerenciados aos clientes" },
+  central:     { title: "Central ASTRO", sub: "Entrega dos pentests gerenciados aos clientes" },
   ia:          { title: "IA / AEGIS", sub: "Configure e teste a chave de API da IA (ex.: Groq)" },
   conta:       { title: "Minha Conta", sub: "Plano, equipe e serviços da sua empresa" },
   billing:     { title: "Assinatura", sub: "Seu plano, cobrança e gestão da assinatura" },
@@ -96,11 +115,14 @@ const gaugeColor = (v) => v >= 60 ? "var(--red)" : v >= 30 ? "var(--yellow)" : "
 
 /* ─── LOGIN ─── */
 function showLogin() {
+  document.title = "Entrar · ASTRO Cyber";
+  $("#login-theme-slot").appendChild($(".theme-control"));
   clearInterval(state.autoTimer);
   $("#view-app").classList.remove("active");
   $("#view-login").classList.add("active");
 }
 function showApp() {
+  $("#topbar-theme-slot").appendChild($(".theme-control"));
   $("#view-login").classList.remove("active");
   $("#view-app").classList.add("active");
 }
@@ -110,7 +132,9 @@ async function doLogin() {
   const password = $("#login-pass").value;
   const err = $("#login-error");
   err.classList.add("hidden");
-  if (!email || !password) { err.textContent = "Informe e-mail e chave de acesso."; err.classList.remove("hidden"); return; }
+  fieldError('login-email', !email ? 'Informe o e-mail.' : !$('#login-email').validity.valid ? 'Informe um e-mail válido.' : '');
+  fieldError('login-pass', !password ? 'Informe a chave de acesso.' : '');
+  if (!email || !password || !$('#login-email').validity.valid) { $('[aria-invalid="true"]').focus(); return; }
   const btn = $("#login-btn");
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Autenticando…';
   try {
@@ -243,36 +267,31 @@ const RENDER = {
 };
 
 /* ═══════════ OVERVIEW ═══════════ */
-function renderOverview() {
-  const s = state.lastScan;
-  const score = s ? s.risk_score : 0;
-  const counts = { crit: 0, high: 0, med: 0, low: 0, info: 0 };
-  (s?.cyber_vulns || []).forEach(f => counts[f.sev] = (counts[f.sev] || 0) + 1);
-  $("#sec-overview").innerHTML = `
-    <div class="grid grid-3">
-      <div class="card" style="text-align:center">
-        <h3>Índice de Risco</h3>
-        <div class="gauge" style="--v:${score};--gcolor:${gaugeColor(score)}">
-          <div><div class="g-num">${score}</div><div class="g-lbl">/ 100</div></div>
-        </div>
-        <p class="mut" style="margin:.8rem 0 0;font-size:.82rem">${s ? "Alvo: " + esc(s.target) : "Nenhum scan executado ainda."}</p>
+async function renderOverview() {
+  const box = $("#sec-overview");
+  box.innerHTML = '<div class="card" role="status"><span class="spinner"></span> Carregando histórico da organização…</div>';
+  try {
+    const d = await api("/api/dashboard");
+    const c = d.counts;
+    box.innerHTML = `
+      <p class="mut">${isDemo() ? "DEMONSTRAÇÃO — dados sintéticos" : "Dados persistidos da organização"} · Atualizado em ${esc(d.generated_at)}</p>
+      <div class="grid grid-4 mb">
+        ${statCard(c.assessments, "Avaliações registradas")}${statCard(c.running, "Em execução")}
+        ${statCard(c.confirmed, "Achados confirmados")}${statCard(c.pending_validation, "Suspeitas para validação")}
       </div>
-      <div class="card">
-        <h3>Achados por severidade</h3>
-        ${sevBars(counts)}
+      <div class="grid grid-3 mb">
+        <div class="card"><h3>Distribuição de achados</h3>${sevBars(d.severity)}</div>
+        <div class="card"><h3>Cobertura e confiança</h3><p>${esc(d.coverage)}</p><p class="mut">${c.observed_hosts} hosts com achados · ${c.observations} observações · ${c.unclassified} sem classificação</p>${d.limitations.map(l => `<p class="mut">${esc(l)}</p>`).join("")}</div>
+        <div class="card"><h3>Próximas ações</h3><button class="btn btn-primary btn-block mb" id="ov-scan">Nova avaliação</button><button class="btn btn-block mb" id="ov-auto">Console autônomo</button><button class="btn btn-block" id="ov-history">Consultar histórico e evidências</button></div>
       </div>
-      <div class="card">
-        <h3>Ações rápidas</h3>
-        <button class="btn btn-primary btn-block mb" id="ov-scan">Novo scan manual</button>
-        <button class="btn btn-block mb" id="ov-auto">Operação autônoma</button>
-        <button class="btn btn-block" id="ov-report" ${s ? "" : "disabled"}>Gerar relatório PDF</button>
-      </div>
-    </div>
-    ${s ? `<div class="card" style="margin-top:1rem"><div class="card-title-row"><h3>Últimos achados</h3><span class="mut">${s.cyber_vulns.length} no total</span></div>${findingsTable(s.cyber_vulns.slice(0, 8))}</div>` : ""}`;
-  $("#ov-scan").addEventListener("click", () => showSection("scan"));
-  $("#ov-auto").addEventListener("click", () => showSection("autonomous"));
-  $("#ov-report")?.addEventListener("click", () => downloadPDF("detailed"));
-  wireFindingButtons($("#sec-overview"));
+      <div class="card"><h3>Atividade recente</h3>${d.recent.length ? `<table class="table"><thead><tr><th>Avaliação</th><th>Alvo</th><th>Estado</th><th>Achados</th><th>Início (UTC)</th></tr></thead><tbody>${d.recent.map(s => `<tr><td class="mono">#${esc(s.id)}</td><td class="mono">${esc(s.target)}</td><td>${esc(s.status)}</td><td>${esc(s.findings_count)}</td><td class="mono">${esc(s.started_at)}</td></tr>`).join("")}</tbody></table>` : '<p class="empty">Nenhuma avaliação registrada. Autorize um escopo antes de iniciar.</p>'}</div>`;
+    $("#ov-scan").addEventListener("click", () => showSection("scan"));
+    $("#ov-auto").addEventListener("click", () => showSection("autonomous"));
+    $("#ov-history").addEventListener("click", () => showSection("history"));
+  } catch (e) {
+    box.innerHTML = `<div class="card"><p>Não foi possível carregar o histórico: ${esc(e.message)}</p><button class="btn" id="ov-retry">Tentar novamente</button></div>`;
+    $("#ov-retry").addEventListener("click", renderOverview);
+  }
 }
 
 /* ═══════════ SCAN MANUAL ═══════════ */
@@ -280,7 +299,8 @@ async function renderScan() {
   const box = $("#sec-scan");
   box.innerHTML = `<div class="card"><span class="spinner"></span> <span class="mut">Carregando engagements…</span></div>`;
   let engs = [];
-  try { engs = (await api("/api/engagements")).engagements || []; } catch (e) {}
+  try { engs = (await api("/api/engagements")).engagements || []; }
+  catch (e) { box.innerHTML = `<div class="card"><p>Falha ao consultar escopos: ${esc(e.message)}</p></div>`; return; }
   const authorized = engs.filter(e => e.status === "authorized");
 
   if (!authorized.length) {
@@ -307,7 +327,7 @@ async function renderScan() {
           <button class="btn btn-primary" id="scan-run">Escanear</button>
         </div>
       </div>
-      <p class="mut" style="margin:.7rem 0 0;font-size:.82rem">O scan roda: descoberta → portas → checagens por área → risco executivo (IA). Hosts fora do escopo são descartados.</p>
+      <p class="mut" style="margin:.7rem 0 0;font-size:.82rem">Perfil atual: inventário TCP defensivo, até 64 candidatos por execução. Registra portas e banners; não confirma vulnerabilidades. Checagens intrusivas não executadas.</p>
     </div>
     <div id="scan-results"></div>`;
   $("#scan-auto").addEventListener("click", autoDiscover);
@@ -356,7 +376,7 @@ function renderScanResults(s) {
       ${statCard(s.cyber_vulns.filter(f => f.sev === "crit").length, "Críticos")}
     </div>
     <div class="card">
-      <div class="card-title-row"><h3>Vulnerabilidades</h3>
+      <div class="card-title-row"><h3>Achados e observações</h3>
         <div class="row">
           <button class="btn btn-sm" id="pdf-quick">PDF rápido</button>
           ${hasFeature("ai") ? `<button class="btn btn-sm btn-primary" id="pdf-detailed">PDF com IA</button>` : ""}
@@ -374,7 +394,8 @@ async function renderAutonomous() {
   const box = $("#sec-autonomous");
   box.innerHTML = `<div class="card"><span class="spinner"></span> <span class="mut">Carregando engagements…</span></div>`;
   let engs = [];
-  try { engs = (await api("/api/engagements")).engagements || []; } catch (e) {}
+  try { engs = (await api("/api/engagements")).engagements || []; }
+  catch (e) { box.innerHTML = `<div class="card"><p>Falha ao consultar escopos: ${esc(e.message)}</p></div>`; return; }
   const authorized = engs.filter(e => e.status === "authorized");
 
   box.innerHTML = `
@@ -412,9 +433,10 @@ async function startAutonomous() {
 function trackRun(runId, target) {
   const live = $("#auto-live");
   live.innerHTML = `
-    <div class="card mb">
+    <div class="console-panel mb">
       <div class="card-title-row"><h3>Operação em ${esc(target)}</h3><span class="pill-live"><span class="dot"></span> ao vivo</span></div>
-      <div class="feed" id="auto-feed"></div>
+      <div class="console-meta"><span>RUN ${esc(runId)}</span><span>ALVO ${esc(target)}</span><span>Eventos recebidos da API · UTC</span></div>
+      <div class="feed" id="auto-feed" role="log" aria-live="polite" aria-label="Eventos da avaliação"></div>
     </div>
     <div id="auto-report"></div>`;
   let since = 0;
@@ -422,13 +444,13 @@ function trackRun(runId, target) {
   const poll = async () => {
     let r;
     try { r = await api(`/api/autonomous/${runId}?since=${since}`); }
-    catch (e) { clearInterval(state.autoTimer); return; }
+    catch (e) { clearInterval(state.autoTimer); live.insertAdjacentHTML("beforeend", `<p role="alert">Monitoramento interrompido: ${esc(e.message)}. Consulte o histórico; a execução pode continuar no servidor.</p>`); return; }
     (r.events || []).forEach(ev => appendFeed(ev));
     since = r.event_count;
     if (r.status === "done" || r.status === "error") {
       clearInterval(state.autoTimer);
       $(".pill-live", live)?.remove();
-      if (r.report) renderAutoReport(r.report);
+      if (r.report) renderAutoReport({ ...r.report, scan_id: r.scan_id });
       else if (r.status === "error") toast("Operação falhou: " + (r.error || ""), "err");
     }
   };
@@ -439,8 +461,9 @@ function trackRun(runId, target) {
 function appendFeed(ev) {
   const feed = $("#auto-feed"); if (!feed) return;
   const item = document.createElement("div");
-  item.className = "feed-item ph-" + ev.phase;
-  item.innerHTML = `<span class="dot"></span><div><div class="fi-phase">${esc(ev.phase)}</div><div>${esc(ev.message)}</div></div>`;
+  item.className = "feed-item";
+  if (ev.phase === "error") item.classList.add("ph-error");
+  item.innerHTML = `<span class="dot"></span><div><time class="event-time">${esc(ev.ts || "")}</time><div class="fi-phase">${esc(ev.phase)}</div><div>${esc(ev.message)}</div></div>`;
   feed.appendChild(item);
   feed.scrollTop = feed.scrollHeight;
 }
@@ -463,7 +486,7 @@ function renderAutoReport(rep) {
       <div class="divider"></div>
       <ol style="padding-left:1.1rem;margin:0">${(plan.attack_steps || []).map(st => `<li style="margin-bottom:.5rem"><b>${esc(st.action)}</b><br><code class="mut">${esc(st.command || "")}</code></li>`).join("")}</ol>
       <p style="margin-top:.8rem"><b>Tempo estimado até root:</b> ${esc(plan.estimated_time_to_root || "—")}</p>
-    </div>` : `<div class="card mb"><p class="mut">Plano de ataque da IA indisponível (AEGIS offline — defina a chave GROQ).</p></div>`}
+    </div>` : `<div class="card mb"><p class="mut">Perfil de inventário defensivo. Planejamento de exploração desabilitado. Ausência de achados críticos não comprova segurança.</p></div>`}
     <div class="card">
       <div class="card-title-row"><h3>Achados</h3><button class="btn btn-sm btn-primary" id="auto-pdf">PDF com IA</button></div>
       ${findingsTable(rep.findings)}
@@ -477,36 +500,38 @@ async function renderEngagements() {
   const box = $("#sec-engagements");
   box.innerHTML = `<div class="card"><span class="spinner"></span> <span class="mut">Carregando…</span></div>`;
   let engs = [];
-  try { engs = (await api("/api/engagements")).engagements || []; } catch (e) {}
+  try { engs = (await api("/api/engagements")).engagements || []; } catch (e) { box.innerHTML = `<div class="card" role="alert"><h3>Falha ao carregar escopos</h3><p>${esc(e.message)}</p><button class="btn" id="eng-retry">Tentar novamente</button></div>`; $('#eng-retry').addEventListener('click',renderEngagements); return; }
+  if (!state.user) return;
   state.engagements = engs;
-  const isAdmin = state.user.role === "admin";
+  const isAdmin = ["owner", "admin"].includes(state.user.role);
   // O conceito de "cliente" só faz sentido para a equipe CYMAG (pentest PARA
   // terceiros). Para a PME que se testa a si mesma, o alvo é a própria empresa.
   const isStaff = !!state.user.is_staff;
   box.innerHTML = `
     <div class="card mb">
-      <h3>Novo engagement</h3>
+      <h3>Novo escopo</h3><p>Criar salva um rascunho. Autorizar permite que avaliações sejam iniciadas nos endereços listados, dentro dos limites do método.</p><p>${isAdmin ? 'Autorize somente redes e ativos que você tem permissão para avaliar.' : 'Somente o Dono ou Admin desta organização pode autorizar. Solicite a revisão a um deles.'}</p>
       <div class="${isStaff ? "grid grid-2" : ""}">
-        <div class="field"><label class="field-label">Nome</label><input class="input" id="eng-name" placeholder="${isStaff ? "Pentest ACME Q3" : "Rede do escritório"}"></div>
-        ${isStaff ? `<div class="field"><label class="field-label">Cliente</label><input class="input" id="eng-client" placeholder="ACME Corp"></div>` : ""}
+        <div class="field"><label class="field-label" for="eng-name">Nome</label><input class="input" id="eng-name" placeholder="${isStaff ? "Avaliação ACME Q3" : "Rede do escritório"}"></div>
+        ${isStaff ? `<div class="field"><label class="field-label" for="eng-client">Cliente</label><input class="input" id="eng-client" placeholder="ACME Corp"></div>` : ""}
       </div>
-      <div class="field"><label class="field-label">Escopo autorizado (CIDRs/IPs, um por linha ou separados por vírgula)</label>
+      <div class="field"><label class="field-label" for="eng-scope">Endereços propostos (CIDRs/IPs, um por linha ou separados por vírgula)</label>
         <textarea class="input" id="eng-scope" placeholder="192.168.0.0/24&#10;10.0.0.5"></textarea></div>
-      <button class="btn btn-primary" id="eng-create">Criar engagement</button>
+      <button class="btn btn-primary" id="eng-create">Criar escopo</button>
     </div>
     <div class="card">
-      <h3>Engagements</h3>
+      <h3>Escopos e autorizações</h3>
       ${engs.length ? `<table class="table"><thead><tr><th>Nome</th>${isStaff ? "<th>Cliente</th>" : ""}<th>Escopo</th><th>Status</th><th></th></tr></thead><tbody>
         ${engs.map(e => `<tr>
           <td><b>${esc(e.name)}</b></td>
           ${isStaff ? `<td>${esc(e.client || "—")}</td>` : ""}
           <td class="mono" style="font-size:.8rem">${esc((e.scope || []).join(", "))}</td>
-          <td><span class="badge badge-status st-${e.status}">${esc(e.status)}</span></td>
+          <td><span class="badge badge-status st-${e.status}">${esc(SCOPE_STATUS_LABELS[e.status] || e.status)}</span></td>
           <td>${isAdmin && e.status !== "authorized" ? `<button class="btn btn-sm" data-auth="${e.id}">Autorizar</button>` : ""}</td>
         </tr>`).join("")}
-      </tbody></table>` : `<p class="empty">Nenhum engagement ainda.</p>`}
+      </tbody></table>` : `<p class="empty">Nenhum escopo cadastrado.</p>`}
     </div>`;
   $("#eng-create").addEventListener("click", createEngagement);
+  if (state.user.role === 'viewer') $('#eng-create').closest('.card').remove();
   $$("[data-auth]", box).forEach(b => b.addEventListener("click", () => authorizeEngagement(b.dataset.auth)));
 }
 
@@ -514,19 +539,20 @@ async function createEngagement() {
   const name = $("#eng-name").value.trim();
   const client = $("#eng-client")?.value.trim() || "";
   const scope = $("#eng-scope").value.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
-  if (!name) { toast("Informe o nome.", "err"); return; }
-  if (!scope.length) { toast("Informe ao menos um IP/CIDR no escopo.", "err"); return; }
+  fieldError('eng-name', !name ? 'Informe o nome.' : '');
+  fieldError('eng-scope', !scope.length ? 'Informe ao menos um IP/CIDR no escopo.' : '');
+  if (!name || !scope.length) { $('[aria-invalid="true"]', $('#sec-engagements')).focus(); return; }
   try {
     await api("/api/engagements", { method: "POST", body: { name, client, scope } });
-    toast("Engagement criado.", "ok");
+    toast("Escopo criado.", "ok");
     renderEngagements();
-  } catch (e) { toast(e.message || "Falha ao criar.", "err"); }
+  } catch (e) { fieldError("eng-scope", e.message || "Falha ao criar. Revise os endereços e tente novamente."); }
 }
 
 async function authorizeEngagement(id) {
   try {
     await api(`/api/engagements/${id}/authorize`, { method: "POST" });
-    toast("Engagement autorizado.", "ok");
+    toast("Escopo autorizado.", "ok");
     renderEngagements();
   } catch (e) { toast(e.message || "Falha ao autorizar.", "err"); }
 }
@@ -571,7 +597,7 @@ async function loadScanFindings(id) {
   try {
     const d = await api(`/api/scans/${id}/findings`);
     box.innerHTML = `<div class="card" style="margin-top:1rem"><h3>Achados do scan #${id}</h3>${d.findings.length ? findingsTable(d.findings) : '<p class="empty">Sem achados.</p>'}</div>`;
-    wireFindingButtons(box);
+    wireFindingButtons(box, d.findings);
   } catch (e) { box.innerHTML = ""; toast("Falha ao carregar achados.", "err"); }
 }
 
@@ -774,56 +800,91 @@ function statCard(num, lbl) {
   return `<div class="card stat"><span class="num">${esc(num)}</span><span class="lbl">${esc(lbl)}</span></div>`;
 }
 
-function findingsTable(list) {
-  if (!list || !list.length) return '<p class="empty">Nenhuma vulnerabilidade encontrada. 🎉</p>';
-  const sorted = [...list].sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
-  return `<table class="table"><thead><tr><th>Severidade</th><th>Vulnerabilidade</th><th>Área</th><th>Ativo</th><th>CVSS</th><th></th></tr></thead><tbody>
-    ${sorted.map((f, i) => `<tr>
-      <td>${sevBadge(f.sev)}</td>
-      <td><b>${esc(f.title)}</b><div class="finding-detail">${esc((f.desc || "").slice(0, 120))}</div></td>
-      <td>${f.category ? `<span class="badge badge-area">${esc(f.category)}</span>` : "—"}</td>
-      <td class="mono" style="font-size:.82rem">${esc(f.host || "")}:${esc(f.port || "")}</td>
-      <td class="mono">${esc(f.cvss ?? "—")}</td>
-      <td>${hasFeature("ai")
-        ? `<button class="btn btn-sm" data-remediate="${i}">Analisar</button>`
-        : `<button class="btn btn-sm" data-upsell="ai" title="Análise por IA — requer plano Profissional">🔒 IA</button>`}</td>
-    </tr>`).join("")}</tbody></table>`;
+const VERIFICATION = { confirmed: "Confirmado", suspected: "Suspeita — validar", observation: "Observação" };
+function verificationBadge(f) {
+  return `<span class="badge verification">${esc(VERIFICATION[f.verification_status] || "Sem classificação — revisar")}${isDemo() ? " · DEMO" : ""}</span>`;
 }
-
-function wireFindingButtons(scope) {
-  $$("[data-remediate]", scope).forEach(btn => {
-    btn.addEventListener("click", () => {
-      const list = state.lastScan?.cyber_vulns || [];
-      const sorted = [...list].sort((a, b) => (SEV_ORDER[a.sev] ?? 9) - (SEV_ORDER[b.sev] ?? 9));
-      openRemediation(sorted[Number(btn.dataset.remediate)]);
-    });
-  });
-  $$("[data-upsell]", scope).forEach(btn => {
-    btn.addEventListener("click", () => { toast("Recurso do plano Profissional. Veja em Planos.", "info"); showSection("planos"); });
+function findingsTable(list) {
+  if (!list || !list.length) return '<p class="empty">Nenhum achado registrado nesta avaliação. Consulte a cobertura e as limitações.</p>';
+  const options = (values, labels = {}) => [...new Set(values)].filter(Boolean).map(v => `<option value="${esc(v)}">${esc(labels[v] || v)}</option>`).join('');
+  return `<div class="findings-browser"><div class="findings-toolbar">
+    <label>Buscar achado<input class="input" data-filter="q" type="search" placeholder="Buscar achado"></label>
+    <label>Severidade<select class="input" data-filter="sev"><option value="">Todas</option>${options(list.map(f=>f.sev),{crit:'Crítica',high:'Alta',med:'Média',low:'Baixa',info:'Informativa'})}</select></label>
+    <label>Ativo<select class="input" data-filter="host"><option value="">Todos</option>${options(list.map(f=>f.host))}</select></label>
+    <label>Validação<select class="input" data-filter="verification_status"><option value="">Todas</option>${options(list.map(f=>f.verification_status || 'unclassified'),{...VERIFICATION,unclassified:'Sem classificação'})}</select></label>
+    <label>Densidade<select class="input" data-density-control><option value="comfortable">Confortável</option><option value="compact">Compacto</option></select></label>
+    </div><div class="finding-chips" aria-label="Filtros ativos"></div><p class="finding-count" role="status"></p>
+    <div class="findings-scroll" data-density="comfortable"><table class="table mobile-cards"><thead><tr>${[['sev','Severidade'],['title','Achado / validação'],['category','Área'],['host','Ativo'],['cvss','CVSS']].map(([key,label])=>`<th aria-sort="none"><button type="button" data-sort="${key}">${label} ↕</button></th>`).join('')}<th>Ações</th></tr></thead><tbody></tbody></table></div></div>`;
+}
+function wireFindingButtons(scope, findings = state.lastScan?.cyber_vulns || []) {
+  $$('.findings-browser', scope).forEach(browser => {
+    let sort = 'sev', direction = 1;
+    const filters = {};
+    const scroll = browser.querySelector('.findings-scroll');
+    const density = browser.querySelector('[data-density-control]');
+    try { density.value = localStorage.getItem('astro-findings-density') === 'compact' ? 'compact' : 'comfortable'; } catch (_) {}
+    scroll.dataset.density = density.value;
+    density.addEventListener('change', () => { scroll.dataset.density = density.value; try { localStorage.setItem('astro-findings-density',density.value); } catch (_) {} });
+    function draw() {
+      const rows = findings.map((f,index)=>({f,index})).filter(({f}) => Object.entries(filters).every(([key,value])=>!value || (key==='q' ? [f.title,f.desc,f.evidence,f.host].join(' ').toLocaleLowerCase('pt-BR').includes(value.toLocaleLowerCase('pt-BR')) : String(f[key] || (key==='verification_status' ? 'unclassified' : '')) === value)));
+      rows.sort((a,b)=>direction * (sort === 'sev' ? (SEV_ORDER[a.f.sev] ?? 9)-(SEV_ORDER[b.f.sev] ?? 9) : sort === 'cvss' ? Number(a.f.cvss ?? -1)-Number(b.f.cvss ?? -1) : String(a.f[sort] || '').localeCompare(String(b.f[sort] || ''),'pt-BR',{numeric:true})));
+      browser.querySelector('.finding-count').textContent = `${rows.length} de ${findings.length} achados`;
+      browser.querySelector('.finding-chips').innerHTML = Object.entries(filters).filter(([,v])=>v).map(([key,value])=> {
+        const control = browser.querySelector(`[data-filter="${key}"]`);
+        const label = control.selectedOptions ? control.selectedOptions[0].textContent : value;
+        return `<button class="btn btn-sm" data-remove="${key}" aria-label="Remover filtro ${esc(label)}">${esc(label)} ×</button>`;
+      }).join('') + (Object.values(filters).some(Boolean) ? '<button class="btn btn-sm" data-clear>Limpar filtros</button>' : '');
+      browser.querySelector('tbody').innerHTML = rows.length ? rows.map(({f,index})=>`<tr>
+        <td data-label="Severidade">${sevBadge(f.sev)}</td>
+        <td data-label="Achado / validação"><b>${esc(f.title)}</b><div>${verificationBadge(f)}</div><details><summary>Ver descrição e evidência</summary><p>${esc(f.desc || 'Descrição não registrada.')}</p><p>Categoria técnica: <code>${esc(f.category || 'Não informada')}</code></p><pre class="mono evidence">${esc(f.evidence || 'Nenhuma evidência registrada.')}</pre><p class="mut">Confiança: ${esc(f.confidence || 'não informada')}</p></details></td>
+        <td data-label="Área">${esc(categoryLabel(f.category || 'Não informada'))}</td><td data-label="Ativo" class="mono">${esc(f.host)}:${esc(f.port)}</td><td data-label="CVSS">${esc(f.cvss ?? '—')}</td>
+        <td data-label="Ações">${hasFeature('ai') ? `<button class="btn btn-sm" data-remediate="${index}">Ver orientação de análise</button>` : '<span class="mut">Orientação de IA requer plano Profissional</span>'}</td></tr>`).join('') : '<tr><td colspan="6">Nenhum achado corresponde aos filtros. Remova os chips ou use Limpar filtros.</td></tr>';
+      $$('[data-remediate]',browser).forEach(btn=>btn.addEventListener('click',()=> {
+        const y = window.scrollY, position = scroll.scrollTop;
+        openRemediation(findings[Number(btn.dataset.remediate)]);
+        const back = $('#modal-back');
+        const observer = new MutationObserver(()=> { if (!back.classList.contains('open')) { observer.disconnect(); window.scrollTo(0,y); scroll.scrollTop=position; btn.focus({preventScroll:true}); } });
+        observer.observe(back,{attributes:true,attributeFilter:['class']});
+      }));
+      $$('[data-remove]',browser).forEach(btn=>btn.addEventListener('click',()=> { filters[btn.dataset.remove]=''; browser.querySelector(`[data-filter="${btn.dataset.remove}"]`).value=''; draw(); }));
+      browser.querySelector('[data-clear]')?.addEventListener('click',()=> { Object.keys(filters).forEach(key=>filters[key]=''); $$('[data-filter]',browser).forEach(control=>control.value=''); draw(); });
+    }
+    $$('[data-filter]',browser).forEach(control=>control.addEventListener('input',()=> { filters[control.dataset.filter]=control.value; draw(); }));
+    $$('[data-sort]',browser).forEach(btn=>btn.addEventListener('click',()=> { direction=sort===btn.dataset.sort ? -direction : 1; sort=btn.dataset.sort; $$('th[aria-sort]',browser).forEach(th=>th.setAttribute('aria-sort','none')); btn.parentElement.setAttribute('aria-sort',direction===1 ? 'ascending' : 'descending'); draw(); }));
+    draw();
   });
 }
 
 async function openRemediation(vuln) {
   if (!vuln) return;
-  const persona = state.user.view === "executive" ? "exec" : "secops";
-  openModal(`<h2>${esc(vuln.title)}</h2><div class="row mb">${sevBadge(vuln.sev)} ${vuln.category ? `<span class="badge badge-area">${esc(vuln.category)}</span>` : ""} <span class="mono mut">${esc(vuln.host || "")}:${esc(vuln.port || "")}</span></div>
-    <p class="mut">${esc(vuln.desc || "")}</p><div class="divider"></div>
-    <div id="rem-body"><div class="row"><span class="spinner"></span> <span class="mut">AEGIS analisando…</span></div></div>
-    <div class="row" style="justify-content:flex-end;margin-top:1rem"><button class="btn" onclick="closeModalGlobal()">Fechar</button></div>`);
+  const persona = ["owner", "viewer"].includes(state.user.role) ? "exec" : "secops";
+  openModal(`<h2>${esc(vuln.title)}</h2><div class="row mb">${sevBadge(vuln.sev)} ${verificationBadge(vuln)} ${isDemo() ? '<span class="badge">Dado sintético</span>' : ''}</div>
+    <section><h3>Evidência registrada</h3><p>${esc(vuln.desc || 'Descrição não registrada.')}</p><pre class="evidence mono">${esc(vuln.evidence || 'Nenhuma evidência registrada.')}</pre></section>
+    <section><h3>Resultado da avaliação</h3><p>${esc(VERIFICATION[vuln.verification_status] || 'Sem classificação')} · ${esc(vuln.host)}:${esc(vuln.port)}</p><p>Orientação não confirma o achado nem comprova impacto.</p></section>
+    <section><h3>Sugestão de análise</h3><p>${isDemo() ? 'Origem: orientação determinística da demonstração; dados sintéticos.' : 'Origem: serviço AEGIS. A resposta pode usar IA ou orientação determinística; a API não informa qual origem foi usada.'}</p><div id="rem-body" role="status">Carregando orientação…</div></section>
+    <div class="row"><button class="btn" id="copy-guidance" disabled>Copiar orientação</button><button class="btn" onclick="closeModalGlobal()">Fechar</button></div>`);
+  const target = $('#rem-body'), copy = $('#copy-guidance');
   try {
-    const r = await api("/api/remediation", { method: "POST", body: { vuln, persona, all_findings: state.lastScan?.cyber_vulns || [] } });
-    $("#rem-body").innerHTML = persona === "exec" ? execRemediationHTML(r) : secopsRemediationHTML(r);
-  } catch (e) {
-    $("#rem-body").innerHTML = `<p class="mut">Falha ao obter análise: ${esc(e.message)}</p>`;
-  }
+    const r = await api('/api/remediation', {method:'POST',body:{vuln,persona,all_findings:state.lastScan?.cyber_vulns || []}});
+    if (!target.isConnected) return;
+    target.innerHTML = persona === 'exec' ? execRemediationHTML(r) : secopsRemediationHTML(r, vuln.verification_status === 'confirmed');
+    if (persona === 'exec' && vuln.verification_status !== 'confirmed') target.insertAdjacentHTML('afterbegin', '<p><b>Somente se confirmado:</b> encaminhe qualquer remediação à TI após validar a evidência.</p>');
+    copy.disabled = false;
+    copy.addEventListener('click', async () => {
+      const text = $('#modal').innerText;
+      try { await navigator.clipboard.writeText(text); toast('Orientação copiada.'); }
+      catch (_) { const field = document.createElement('textarea'); field.className='input'; field.value=text; field.setAttribute('aria-label','Orientação para copiar'); target.appendChild(field); field.focus(); field.select(); }
+    });
+  } catch (error) { if (target.isConnected) target.textContent = 'Falha ao obter orientação: '+error.message; }
 }
-function secopsRemediationHTML(r) {
+function secopsRemediationHTML(r, confirmed = false) {
   return `
-    ${r.steps ? `<h3>Passos</h3><ol style="padding-left:1.1rem">${r.steps.map(s => `<li style="margin-bottom:.3rem">${esc(s)}</li>`).join("")}</ol>` : ""}
+    ${r.steps ? `${confirmed ? "" : "<p class=\"guidance-warning\">Estes passos só valem se o achado for confirmado</p>"}<h3>Passos</h3><ol style="padding-left:1.1rem">${r.steps.map(s => `<li style="margin-bottom:.3rem">${esc(String(s).replace(/^\s*\d+[.)]\s*/, ""))}</li>`).join("")}</ol>` : ""}
+    <details class="technical-guidance"><summary>Detalhes técnicos para a TI</summary>
     ${r.commands ? `<h3>Comandos</h3><pre class="mono" style="background:var(--bg);padding:.8rem;border-radius:.4rem;overflow:auto;font-size:.8rem">${esc(r.commands)}</pre>` : ""}
     ${r.attack_chain ? `<p><b>Cadeia de ataque:</b> ${esc(r.attack_chain)}</p>` : ""}
     ${r.mitre_tactics ? `<p><b>MITRE:</b> ${esc((r.mitre_tactics || []).join(", "))}</p>` : ""}
-    ${r.next_recon ? `<p><b>Próximo recon:</b> <code>${esc(r.next_recon)}</code></p>` : ""}`;
+    ${r.next_recon ? `<p><b>Próximo recon:</b> <code>${esc(r.next_recon)}</code></p>` : ""}</details>`;
 }
 function execRemediationHTML(r) {
   return `
@@ -867,7 +928,7 @@ function renderPlans() {
     const annual = state.cycle === "year";
     box.innerHTML = `
       <div class="row spread mb" style="align-items:flex-end">
-        <div><p class="mut" style="margin:0;max-width:60ch">Escolha o quanto a CYMAG faz <b>por você</b>. Do scan manual ao pentest gerenciado com laudo assinado. Troque de plano quando quiser.</p></div>
+        <div><p class="mut" style="margin:0;max-width:60ch">Escolha o quanto a ASTRO Cyber faz <b>por você</b>. Do scan manual ao pentest gerenciado com laudo assinado. Troque de plano quando quiser.</p></div>
         <div class="seg" id="cycle-seg">
           <button data-cycle="month" class="${annual ? "" : "active"}">Mensal</button>
           <button data-cycle="year" class="${annual ? "active" : ""}">Anual <span class="save-pill">2 meses grátis</span></button>
@@ -909,7 +970,7 @@ function choosePlan(key, plans) {
   if (key === "enterprise") {
     openModal(`<h2>Plano Enterprise</h2>
       <p class="mut">O Enterprise é sob consulta: contínuo, dedicado, com integrações, on-premise e cobertura OT/IoT. Preço a partir de ${BRL(p.price_month)}/mês conforme o número de IPs e o escopo.</p>
-      <div class="callout mb">Deixe seu contato que o time comercial da CYMAG retorna em até 1 dia útil.</div>
+      <div class="callout mb">Deixe seu contato que o time comercial da ASTRO Cyber retorna em até 1 dia útil.</div>
       <div class="field"><label class="field-label">E-mail para contato</label><input class="input" id="ent-email" value="${esc(state.user?.email || "")}"></div>
       <div class="row" style="justify-content:flex-end;margin-top:1rem"><button class="btn" onclick="closeModalGlobal()">Fechar</button>
         <button class="btn btn-primary" id="ent-send">Solicitar contato</button></div>`);
@@ -1015,9 +1076,9 @@ function renderBilling() {
         <div class="card">
           <h3>Serviço gerenciado</h3>
           ${b.managed_cadence_days
-            ? `<p>A CYMAG executa o pentest <b>a cada ${b.managed_cadence_days} dias</b> e assina o laudo.</p>
+            ? `<p>A ASTRO Cyber executa o pentest <b>a cada ${b.managed_cadence_days} dias</b> e assina o laudo.</p>
                <p class="mut" style="font-size:.82rem">Próxima entrega: ${esc((b.next_managed_at || "a agendar").replace("T", " ").slice(0, 10))}</p>`
-            : `<p class="mut">Seu plano é self-service. No plano <b>Gerenciado</b>, a CYMAG faz o pentest por você e assina o laudo.</p>`}
+            : `<p class="mut">Seu plano é self-service. No plano <b>Gerenciado</b>, a ASTRO Cyber faz o pentest por você e assina o laudo.</p>`}
         </div>
       </div>
       <div class="card">
@@ -1068,12 +1129,12 @@ function renderCentral() {
     api("/api/accounts").then(r => r.accounts).catch(() => []),
     api("/api/reviews").then(r => r.queue).catch(() => []),
   ]).then(([accounts, queue]) => {
-    const head = clientsCard(accounts);
+    const head = `<div class="card mb legacy-explanation"><h2>Operação interna · legado</h2><p>Fila de validação e laudo. A troca entre organizações ainda não está disponível.</p><p>Indicador de risco legado: valor risk_score armazenado pela avaliação antiga, agregado de pesos por severidade (crítica 15, alta 8, média 3, baixa 1), limitado a 100. Não é CVSS, não mede cobertura e não comprova achados confirmados.</p></div>` + clientsCard(accounts);
     if (!queue.length) { box.innerHTML = head + `<div class="card"><p class="empty">Nenhum scan aguardando entrega/laudo. 🎉</p></div>`; return; }
     box.innerHTML = head + `<div class="card"><h3>Scans aguardando validação e laudo (${queue.length})</h3>
-      <table class="table"><thead><tr><th>#</th><th>Alvo</th><th>Achados</th><th>Risco</th><th>Quando</th><th></th></tr></thead><tbody>
+      <table class="table"><thead><tr><th>#</th><th>Cliente</th><th>Alvo</th><th>Achados</th><th>Risco legado</th><th>Quando</th><th></th></tr></thead><tbody>
       ${queue.map(s => `<tr>
-        <td class="mono">${s.id}</td>
+        <td class="mono">${s.id}</td><td>${esc(accounts.find(a => a.id === s.account_id)?.name || "Cliente não vinculado")}</td>
         <td class="mono" style="font-size:.82rem">${esc(s.target)}</td>
         <td>${s.findings_count ?? 0}</td>
         <td><b>${s.risk_score ?? 0}</b>/100</td>
@@ -1111,7 +1172,7 @@ function iaStatusBadge(s) {
             : "Sem chave — rodando em modo offline (respostas determinísticas)."}</span>
         </div>
         <div class="mut" style="font-size:.82rem;text-align:right">
-          ${on ? `Chave <code>${esc(s.key_mask || "—")}</code><br>origem: ${esc(src)}` : ""}
+          ${on ? `Origem: ${esc(src)}` : ""}
         </div>
       </div>
     </div>`;
@@ -1121,12 +1182,12 @@ function renderIA() {
   const box = $("#sec-ia");
   box.innerHTML = `<div class="card"><span class="spinner"></span> <span class="mut">Carregando status da IA…</span></div>`;
   api("/api/admin/ai/status").then(s => {
-    const models = (s.known_models || []).map(m => `<option value="${esc(m)}">`).join("");
+    const models = [...new Set([s.model,...(s.known_models || [])].filter(Boolean))].map(m => `<option value="${esc(m)}" ${m === s.model ? 'selected' : ''}>${esc(m)}</option>`).join("");
     box.innerHTML = `
       <div id="ia-status">${iaStatusBadge(s)}</div>
       <div class="grid grid-2">
         <div class="card">
-          <h3>Configurar / testar a API</h3>
+          <h3>Integração de IA</h3><p>Teste a conexão sem salvar; depois aplique o valor testado.</p><p>Provedor atual: <b>${esc(s.provider || "Offline")}</b>. O modelo define quem responde; o endereço identifica o serviço.</p><p id="ia-test-state" role="status">Não testada</p>
           <p class="mut" style="font-size:.84rem;margin-bottom:.8rem">
             Cole a chave de qualquer conta (ex.: a sua da <b>Groq</b>), escolha o modelo e
             clique em <b>Testar</b>. Se a resposta vier, clique em <b>Aplicar</b> para ativar o AEGIS.</p>
@@ -1138,8 +1199,7 @@ function renderIA() {
           </div>
           <div class="field">
             <label class="field-label" for="ia-model">Modelo</label>
-            <input id="ia-model" class="input" list="ia-models" value="${esc(s.model || "")}" autocomplete="off">
-            <datalist id="ia-models">${models}</datalist>
+            <select id="ia-model" class="input">${models}</select>
           </div>
           <details style="margin:.2rem 0 .8rem">
             <summary class="mut" style="cursor:pointer;font-size:.82rem">Opções avançadas (outro provedor)</summary>
@@ -1156,9 +1216,9 @@ function renderIA() {
 
           <div class="row" style="gap:.5rem;flex-wrap:wrap">
             <button class="btn btn-primary" id="ia-test">Testar conexão</button>
-            <button class="btn btn-gradient" id="ia-apply">Aplicar e ativar</button>
+            <button class="btn" id="ia-apply" disabled>Aplicar e ativar</button>
             <button class="btn btn-ghost" id="ia-reset" title="Descartar a chave salva e voltar ao .env">Restaurar padrão</button>
-          </div>
+          </div><div id="ia-reset-confirm" hidden><p>Remove a configuração salva e restaura provedor, modelo e chave do ambiente do servidor. O padrão pode ficar offline.</p><button class="btn" id="ia-reset-yes">Confirmar restauração</button><button class="btn" id="ia-reset-no">Cancelar</button></div>
         </div>
 
         <div class="card">
@@ -1176,36 +1236,44 @@ function renderIA() {
       prompt: promptEl.value.trim(),
     });
 
+    let tested = null, testing = false;
+    const fingerprint = () => JSON.stringify(payload());
+    const resetTest = () => { tested = null; $('#ia-test-state').textContent = 'Não testada'; $('#ia-apply').disabled = true; $('#ia-apply').classList.remove('btn-primary'); $('#ia-test').classList.add('btn-primary'); };
+    [keyEl,modelEl,baseEl,promptEl].forEach(el => el.addEventListener('input', resetTest));
+    $('#ia-reset').addEventListener('click', () => { $('#ia-reset-confirm').hidden = false; });
+    $('#ia-reset-no').addEventListener('click', () => { $('#ia-reset-confirm').hidden = true; });
     const refreshStatus = () => api("/api/admin/ai/status")
       .then(st => { $("#ia-status").innerHTML = iaStatusBadge(st); }).catch(() => {});
 
     $("#ia-test").addEventListener("click", () => {
       const p = payload();
-      if (!p.api_key) { toast("Informe uma chave de API.", "err"); keyEl.focus(); return; }
+      if (!p.api_key) { fieldError("ia-key", "Informe uma chave de API."); keyEl.focus(); return; }
       const btn = $("#ia-test"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Testando…';
+      resetTest(); testing = true; const submitted = fingerprint();
       resEl.innerHTML = `<p class="mut"><span class="spinner"></span> Consultando o provedor…</p>`;
       api("/api/admin/ai/test", { method: "POST", body: p })
-        .then(r => { resEl.innerHTML = iaResultHTML(r, true); })
-        .catch(e => { resEl.innerHTML = iaResultHTML(e.data || { ok: false, error: e.message }, false); })
-        .finally(() => { btn.disabled = false; btn.textContent = "Testar conexão"; });
+        .then(r => { if (submitted !== fingerprint()) return; resEl.innerHTML = iaResultHTML(r, true); tested = r.ok ? submitted : null; $('#ia-test-state').textContent = r.ok ? 'Teste OK: resposta recebida do modelo ' + r.model : 'Falhou: ' + (r.error || 'Provedor não respondeu'); $('#ia-apply').disabled = !tested; $('#ia-apply').classList.toggle('btn-primary',!!tested); btn.classList.toggle('btn-primary',!tested); })
+        .catch(e => { if(submitted !== fingerprint()) return; tested = null; $('#ia-test-state').textContent = 'Falhou: ' + (e.data?.error || e.message); resEl.innerHTML = iaResultHTML(e.data || { ok: false, error: e.message }, false); })
+        .finally(() => { testing = false; btn.disabled = false; btn.textContent = "Testar conexão"; });
     });
 
     $("#ia-apply").addEventListener("click", () => {
+      if(testing || tested !== fingerprint()) return;
       const p = payload();
-      if (!p.api_key) { toast("Informe uma chave de API.", "err"); keyEl.focus(); return; }
+      if (!p.api_key) { fieldError("ia-key", "Informe uma chave de API."); keyEl.focus(); return; }
       const btn = $("#ia-apply"); btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Aplicando…';
       api("/api/admin/ai/apply", { method: "POST", body: p })
-        .then(() => { toast("AEGIS ativado com esta chave! ✅", "ok"); keyEl.value = ""; refreshStatus(); })
+        .then(() => { toast("AEGIS ativado com esta chave! ✅", "ok"); keyEl.value = ""; resetTest(); refreshStatus(); })
         .catch(e => { toast((e.data && e.data.error) || e.message || "Falha ao aplicar.", "err"); })
-        .finally(() => { btn.disabled = false; btn.textContent = "Aplicar e ativar"; });
+        .finally(() => { btn.disabled = tested !== fingerprint(); btn.textContent = "Aplicar e ativar"; });
     });
 
-    $("#ia-reset").addEventListener("click", () => {
+    $("#ia-reset-yes").addEventListener("click", () => {
       const btn = $("#ia-reset"); btn.disabled = true;
       api("/api/admin/ai/reset", { method: "POST" })
-        .then(() => { toast("Configuração restaurada para o padrão (.env).", "info"); keyEl.value = ""; refreshStatus(); })
+        .then(() => { toast("Configuração restaurada para o padrão (.env).", "info"); keyEl.value = ""; resetTest(); refreshStatus(); })
         .catch(e => { toast(e.message || "Falha ao restaurar.", "err"); })
-        .finally(() => { btn.disabled = false; });
+        .finally(() => { btn.disabled = false; $("#ia-reset-confirm").hidden = true; });
     });
   }).catch(() => {
     box.innerHTML = `<div class="card"><p class="mut">Falha ao carregar o painel de IA. Este painel é exclusivo do admin.</p></div>`;
@@ -1248,14 +1316,14 @@ function renderConta() {
           ${svc(plan.autonomous, "Agente autônomo")}
           ${svc(plan.ai, "Copiloto de IA (AEGIS)")}
           ${svc(plan.training, "Treinamento / onboarding CYMAG")}
-          ${svc(plan.managed, "Pentest gerenciado pela CYMAG")}
+          ${svc(plan.managed, "Pentest gerenciado pela ASTRO Cyber")}
         </div>
         <div class="card">
           <h3>Serviço gerenciado</h3>
           ${account.managed_cadence_days
-            ? `<p>A CYMAG executa o pentest <b>a cada ${account.managed_cadence_days} dias</b> e assina o laudo.</p>
+            ? `<p>A ASTRO Cyber executa o pentest <b>a cada ${account.managed_cadence_days} dias</b> e assina o laudo.</p>
                <p class="mut" style="font-size:.82rem">Próxima entrega: ${esc((account.next_managed_at || "a agendar").replace("T", " "))}</p>`
-            : `<p class="mut">Seu plano é self-service: sua equipe roda a plataforma. No plano Gerenciado, a CYMAG faz o pentest por você.</p>`}
+            : `<p class="mut">Seu plano é self-service: sua equipe roda a plataforma. No plano Gerenciado, a ASTRO Cyber faz o pentest por você.</p>`}
           <p class="mut" style="font-size:.82rem;margin-top:.5rem">Onboarding: ${account.onboarding_done ? "concluído ✅" : "pendente"}</p>
         </div>
       </div>
@@ -1274,15 +1342,18 @@ async function downloadPDF(kind) {
   // No modo demonstração não há backend/fpdf: geramos um relatório imprimível no
   // navegador (o usuário salva como PDF pelo diálogo de impressão).
   if (isDemo()) { openPrintableReport(s, kind); return; }
+  if (!s.scan_id) { toast("Scan sem identificador — rode o scan novamente.", "err"); return; }
   toast("Gerando PDF…", "info");
-  const body = { target: s.target, findings: s.cyber_vulns, exec_risks: s.exec_risks || [], score: s.risk_score };
-  if (kind === "detailed") body.instructions = "Relatório profissional de segurança do CYMAG.";
+  // SEC-006: o laudo é montado no backend a partir do scan_id (dados persistidos do
+  // tenant), não de findings enviados pelo cliente.
+  const body = { scan_id: s.scan_id };
+  if (kind === "detailed") body.instructions = "Relatório profissional de segurança.";
   try {
-    const r = await fetch("/api/report/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await fetch("/api/report/" + kind, { method: "POST", headers: { "Content-Type": "application/json", "X-Requested-With": "ASTRO" }, body: JSON.stringify(body) });
     if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.error || "Falha ao gerar PDF.", "err"); return; }
     const blob = await r.blob();
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `cymag_${kind}.pdf`; a.click();
+    const a = document.createElement("a"); a.href = url; a.download = `astro_cyber_${kind}.pdf`; a.click();
     URL.revokeObjectURL(url);
     toast("PDF gerado.", "ok");
   } catch (e) { toast("Falha ao gerar PDF.", "err"); }
@@ -1297,18 +1368,18 @@ function openPrintableReport(s, kind) {
   const when = new Date().toLocaleString("pt-BR");
   const rows = list.map(f => `<tr>
       <td><span class="s s-${f.sev}">${SEV[f.sev] || "Info"}</span></td>
-      <td><b>${esc(f.title)}</b><div class="d">${esc((f.desc || "").slice(0, 200))}</div></td>
+      <td><b>${esc(f.title)}</b><div class="d">${esc(VERIFICATION[f.verification_status] || "Sem classificação")} · DADOS SINTÉTICOS</div><div class="d">${esc((f.desc || "").slice(0, 200))}</div></td>
       <td>${esc(f.host || "")}:${esc(f.port || "")}</td>
       <td>${esc(f.cve || "—")}</td><td>${esc(f.cvss ?? "—")}</td></tr>`).join("");
   const w = window.open("", "_blank");
   if (!w) { toast("Permita pop-ups para gerar o relatório.", "err"); return; }
   w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8">
-    <title>CYMAG — Relatório ${kind === "detailed" ? "Executivo" : "Técnico"}</title>
+    <title>ASTRO Cyber — Relatório ${kind === "detailed" ? "Executivo" : "Técnico"}</title>
     <style>
-      *{box-sizing:border-box} body{font-family:Inter,Arial,sans-serif;color:#111827;margin:0;padding:40px;line-height:1.5}
-      .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #4f46e5;padding-bottom:16px;margin-bottom:24px}
+      *{box-sizing:border-box} body{font-family:"Instrument Sans",Arial,sans-serif;color:#0A0A0A;margin:0;padding:40px;line-height:1.5}
+      .hd{display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #0A0A0A;padding-bottom:16px;margin-bottom:24px}
       .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
-      .logo .b{width:34px;height:34px;border-radius:9px;background:#4f46e5;color:#fff;display:grid;place-items:center}
+      .logo .b{width:34px;height:34px;border-radius:9px;background:#0A0A0A;color:#fff;display:grid;place-items:center}
       h1{font-size:22px;margin:0 0 4px} .mut{color:#6b7280;font-size:13px}
       .kpis{display:flex;gap:16px;margin:24px 0}
       .kpi{flex:1;border:1px solid #e5e7eb;border-radius:10px;padding:14px}
@@ -1318,15 +1389,15 @@ function openPrintableReport(s, kind) {
       td{padding:9px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}
       .d{color:#6b7280;font-size:11.5px;margin-top:3px}
       .s{font-size:11px;font-weight:700;padding:2px 8px;border-radius:5px}
-      .s-crit{background:#fef2f2;color:#dc2626}.s-high{background:#fff5ed;color:#ea580c}
-      .s-med{background:#fffbeb;color:#d97706}.s-low{background:#eff6ff;color:#2563eb}.s-info{background:#f3f4f6;color:#6b7280}
+      .s-crit{background:#F2F2F2;color:#D93025}.s-high,.s-med{background:#F2F2F2;color:#B7791F}
+      .s-low,.s-info{background:#F2F2F2;color:#6B6B6B}
       .ft{margin-top:30px;color:#9ca3af;font-size:11px;border-top:1px solid #e5e7eb;padding-top:12px}
       @media print{body{padding:20px}}
     </style></head><body>
-    <div class="hd"><div class="logo"><span class="b">C</span> CYMAG Enterprise</div>
+    <div class="hd"><div class="logo"><img src="${esc(new URL('static/brand/logo-astro-preto.svg', window.location.href).href)}" alt="ASTRO" width="118"> <span>CYBER</span></div>
       <div class="mut" style="text-align:right">Relatório ${kind === "detailed" ? "Executivo (com IA)" : "Técnico"}<br>${when}</div></div>
     <h1>Avaliação de segurança — ${esc(s.target || "")}</h1>
-    <p class="mut">Documento gerado pela plataforma CYMAG. Valores de risco e impacto são estimativas para priorização.</p>
+    <p class="mut">Documento gerado pela plataforma ASTRO Cyber. Valores de risco e impacto são estimativas para priorização.</p>
     <div class="kpis">
       <div class="kpi"><div class="n">${s.risk_score ?? 0}/100</div><div class="l">Índice de risco</div></div>
       <div class="kpi"><div class="n">${list.length}</div><div class="l">Vulnerabilidades</div></div>
@@ -1335,7 +1406,7 @@ function openPrintableReport(s, kind) {
     </div>
     <h2 style="font-size:15px">Vulnerabilidades encontradas</h2>
     <table><thead><tr><th>Sev.</th><th>Vulnerabilidade</th><th>Ativo</th><th>CVE</th><th>CVSS</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="ft">CYMAG Enterprise · Relatório de demonstração · As estimativas não constituem perícia contábil.</div>
+    <div class="ft">ASTRO Cyber · Relatório de demonstração · As estimativas não constituem perícia contábil.</div>
     <script>setTimeout(function(){window.print()},400)<\/script>
     </body></html>`);
   w.document.close();
@@ -1343,9 +1414,16 @@ function openPrintableReport(s, kind) {
 }
 
 /* ─── BOOT: retoma sessão se houver ─── */
-(async function boot() {
+document.addEventListener("DOMContentLoaded", async function boot() {
+  if (window.ASTRO_ROUTER) { await window.ASTRO_ROUTER.boot(); return; }
   try {
     const me = await api("/api/me");
     if (me.authenticated) enterApp(me);
   } catch (e) { /* não autenticado — fica no login */ }
-})();
+});
+
+$('#demo-toggle').addEventListener('click', () => {
+  const expanded = $('#demo-toggle').getAttribute('aria-expanded') !== 'true';
+  $('#demo-toggle').setAttribute('aria-expanded', String(expanded));
+  $('#demobar').classList.toggle('expanded', expanded);
+});

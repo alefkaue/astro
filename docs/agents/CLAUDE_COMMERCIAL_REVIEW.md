@@ -1,0 +1,64 @@
+# ASTRO Cyber: joint commercial review (Claude ÔåÆ Codex)
+
+I only read files. I made no edits, ran no commands or tests, and launched no scans or browsers. Labels: **[CODE]** means I confirmed it in source, **[HYP]** is a product hypothesis, and **[REVIEW]** needs a browser, customer or legal check. The three docs are accurate about isolation progress. They underestimate a few problems in the output itself.
+
+## 1. Blocking P0 findings missing from or understated in the docs
+
+1. **The scanner runs from ASTRO's own host against any address, and the customer approves their own scope.** [CODE] `core/scope.py:17` accepts any IP/CIDR, including loopback, `169.254.169.254` (cloud metadata), RFC1918 hosting ranges and third-party public IPs. The owner creates and authorizes the scope alone (`app/engagements/routes.py:71`). On a hosted deployment, any tenant can probe ASTRO's own infrastructure or someone else's. `/api/auto_discover` (`app/scans/routes.py:217`) also shows the backend server's subnets to any logged-in user, including viewers. This blocks any hosted pilot. [REVIEW legal] Authorization letter, proof of control, and exposure under Brazilian computer-intrusion law.
+2. **Every report puts made-up money and probability figures on a plain open-port observation.** [CODE] `ExploitEngine.check` only ever emits "Servi├ºo TCP observado" with severity `info`. Every PDF then runs `aegis.offline_exec_risk()` (`app/reports/routes.py:45`), which prints "Exposi├º├úo de ativo cr├¡tico / R$ 2.5M / Probabilidade M├®dia" for each one (`app/ai/aegis.py:412` ÔåÆ `pdf.py:303`). `core/business.py` also assigns R$ loss ranges to info findings. This contradicts DET-001 and the readiness doc.
+3. **"0 findings" and "could not reach anything" look the same, and coverage is silently cut.** [CODE] `scanner.py:160` truncates any CIDR to its first 64 hosts and records nothing. If no ports respond, the scan still ends as `done` with 0 findings (`scanner.py:90`, `scans/routes.py:88`). This violates the doc's own rule that a collection failure must never read as "safe". Plan `max_ips` is never enforced, so the free tier (`max_ips=1`) can scan a CIDR.
+4. **The managed review service can't be delivered.** [CODE] Review routes are scoped to the reviewer's own tenant (`scans/routes.py:250`). A `cymag` user in the CYMAG account never sees the pending queue of a managed customer like Loja Verde. On top of that, manual scans enter review only when there are findings (`:91`), while autonomous runs always do (`autonomous/routes.py:83`). A clean result, which is the one that most needs human validation of coverage, skips review.
+5. **Owners can unlock paid features for free, and the catalog still sells what the docs say not to.** [CODE] `POST /api/account/plan` switches any account to Gerenciado (unlimited quota, AI, managed) with no payment (`billing/routes.py:97`). The public `/api/plans` tagline still says "assina o laudo (LGPD/ISO/PCI)" (`core/plans.py:92`), and the tiers sell the "agente aut├┤nomo".
+6. **Customer data goes to an external LLM without consent or plan gating.** [CODE] `/api/report/detailed` calls AEGIS for any plan and any role, viewers included (`reports/routes.py:202`). An admin can set an arbitrary `base_url` (`admin/routes.py:65`), which would redirect every tenant's hosts and banners to any endpoint. The key is stored in plaintext in `instance/ai_config.json` (`aegis.py:218`). `/api/exploit_chain` and the offline fallback return "Root/SYSTEM" and "15ÔÇô30 minutos" (`scans/routes.py:208`), which contradicts the defensive positioning.
+7. **Scans and runs are not durable, even for a pilot.** [CODE] `/api/scan` runs synchronously inside the HTTP request: up to 64 hosts ├ù 30 s host-timeout, roughly 30 minutes worst case (estimated, not measured). If the worker is killed or restarted, the scan stays `running` forever and the dashboard counts it that way. Autonomous runs and the 3-run concurrency cap live in process memory and are global across tenants. Quota is check-then-insert, so it can race. Rate limiting and runs therefore require a single process. [REVIEW] I didn't read the launch scripts.
+8. **Authentication basics are missing.** [CODE] Login has no rate limit. Sessions are Flask signed cookies: logout doesn't revoke a stolen cookie, which stays valid for up to 12 h (deactivation is rechecked, which helps). `get_json(force=True)` ignores content-type, and there is no CSRF token (SameSite=Lax mitigates partly). `audit_log` has no `account_id`, so there can be no per-organization audit trail and no per-tenant deletion. Accounts can't be invited or have passwords reset, so onboarding means a direct DB insert.
+9. **There is no retention or deletion code at all.** [CODE] Findings and banners are kept forever, and there is no export or purge.
+
+## 2. Challenges to the documents
+
+- **Value claim [CODE+HYP].** The engine only lists open TCP ports among 34 fixed ports, with no version detection or checks. "Descoberta ÔåÆ evid├¬ncia ÔåÆ a├º├úo" today amounts to "port X is open". The credible near-term value is **external exposure of sensitive services** (RDP, SMB, databases, admin panels reachable from the internet) plus analyst judgment. Sell that, not a "vulnerability platform".
+- **Service vs SaaS.** G1 asks for a connector, durable jobs and self-onboarding. That's G3 scope inflating the pilot gate. The smallest pilot should be a **service using internal tooling**, where the customer portal is optional and read-only.
+- **Personas [HYP].** Many SMBs have neither an "operator" nor an owner who can judge technical scope. The overlooked buyer is the **MSP or outsourced IT provider** who manages many clients. That provider needs exactly the cross-tenant assignment model that doesn't exist yet. Interview them separately.
+- **Owner self-authorization** is a legal and safety risk, and approving a scan scope on mobile makes it worse. Use a staff countersign plus `valid_until` and exclusions, and keep scope approval off "mobile approvals" until legal review.
+- **Accessibility [REVIEW].** What customers actually receive is the PDF. fpdf output is very likely untagged and unreadable by screen readers, and it doesn't follow light/dark. Add the PDF to the accessibility gate. Web WCAG work doesn't cover it.
+- **Owner panel [CODE].** It shows only the latest finished scan (`db.latest_account_scan`). If that scan was a narrow one, everything else disappears, so it is not account posture. "Dismissed" acts as risk acceptance with no expiry or reason requirement.
+- **Settings.** I agree with pushing most of it to P1. For the pilot, either ASTRO provisions accounts and customers get read-only access with few users, or MFA is P0. Pick one; don't build both.
+
+## 3. Prioritized backend tasks (Claude implements, Codex reviews)
+
+**Ownership rule:** a file belongs to one open task. ÔƒÂ means the file passes to the next task only after the first one merges.
+
+| # | Task | Exclusive files | Depends on | Acceptance tests (new) |
+|---|---|---|---|---|
+| T1 | **PILOT-GATES**: env flags, off by default in staging/prod: AI, autonomous, self-billing, auto_discover, exploit_chain | `app/features.py` (new), `app/__init__.py` | ÔÇô | Prod env: `POST /api/account/plan` returns 404/403; `/api/exploit_chain` and `/api/auto_discover` return 404; `aegis.online` is False even with `GROQ_API_KEY` set unless `CYMAG_ENABLE_AI=1`; dev keeps current behavior |
+| T2 | **SCOPE-DENY**: block loopback, link-local/metadata, multicast, reserved and IPv6 equivalents; `CYMAG_SCOPE_DENY` list; prefix cap; enforce `max_ips` | `core/scope.py`, `app/scope.py` | ÔÇô | Scope containing `127.0.0.1`, `169.254.169.254/32`, `::1` or a deny-listed CIDR ÔåÆ 400; a `/16` ÔåÆ 400; free-tier CIDR > 1 host ÔåÆ 403; existing scope tests still pass |
+| T3 | **HONEST-OUTPUT**: no R$ or probability on `observation`/`info`; PDF shows review_status, coverage, limitations, and "revis├úo Ôëá assinatura digital"; fix plan tagline | `app/ai/aegis.py` (offline_* only), `core/business.py`, `app/reports/pdf.py`, `app/reports/routes.py`, `core/plans.py` | ÔÇô | PDF text for an info-only scan has no "R$" or "Probabilidade"; owner summary shows `open_loss` = 0/"n├úo estimado" for observations; `/api/plans` has no "LGPD/ISO/PCI" or "assina"; detailed report makes no AEGIS call when T1's AI flag is off |
+| T4 | **AUTH-HARDEN**: login rate limit (per IP+email, single-process caveat documented); JSON content-type required on mutating `/api/*`; CSRF token header | `app/security.py` (new), `app/auth/routes.py`, `app/auth/decorators.py` | T1 adds `security.init_app` | 6th bad login in the window returns 429; `text/plain` POST returns 415; POST without token returns 403; login-CSRF test |
+| T5 | **DATA-MIGRATIONS**: versioned migrations. Add `audit_log.account_id`; scan `coverage_json`, `hosts_planned/probed`, `error_reason`, `heartbeat_at`; engagement `valid_until`, `exclusions`, `authorization_ref`, `staff_approved_by`; `users.session_epoch`; atomic `create_scan_within_quota`; boot reconciliation (stale `running` ÔåÆ `error: interrupted`) | `app/migrations/` (new), `app/db.py` | ÔÇô | Idempotent on a copy of the current DB; backup-before-migrate; stale running scan is reconciled; 2 concurrent quota requests at limitÔêÆ1 ÔåÆ exactly 1 succeeds |
+| T6 | **SCAN-INTEGRITY**: record coverage, refuse truncation instead of silently cutting, `partial`/`error` when probes fail, global time budget, `/api/scan` ÔåÆ 202 background job (interim, same in-process runner), consistent review enqueue including 0-finding scans | `core/scanner.py`, `app/scans/routes.py`, `app/autonomous/*` | T5, T2 | Unreachable target ÔåÆ `error`/`partial`, never `done`+0; a /24 records planned=254 or is rejected; time budget hit ÔåÆ `partial`; managed plan with 0 findings ÔåÆ `pending` |
+| T7 | **ENGAGEMENT-AUTHZ**: enforce `valid_until` and exclusions; `authorization_ref` required; staff countersign in prod | `app/engagements/routes.py` ÔƒÂ `app/scope.py` after T2 | T2, T5 | Expired engagement returns 403; excluded IP inside scope is skipped and recorded; prod authorization without staff approval stays non-scannable |
+| T8 | **SESSION-REVOKE**: `session_epoch` checked in `current_user`; logout-all; bump on deactivate | `app/auth/*` ÔƒÂ after T4 | T4, T5 | Replaying a cookie after logout-all returns 401 |
+| T9 | **DATA-LIFECYCLE**: CLI (no HTTP yet) for tenant export to JSON, tenant purge, scan purge older than N days, SQLite online backup and restore check | `scripts/data_lifecycle.py` (new), `app/lifecycle.py` (new) | T5 | Export then purge leaves 0 rows for the tenant in every table, including audit; restoring the backup matches row counts |
+| T10 | **SEC-REVIEW assignments** (cross-tenant staff, expiry, audit) | as already planned | T5 | **Defer**: not needed for the pilot below |
+
+JOB-CORE and SEC-RBAC stay G2 work. T1, T2, T3, T4 and T5 can run in parallel because their files don't overlap.
+
+## 4. Smallest credible assisted pilot [HYP, REVIEW legal]
+
+- **Customers:** 2ÔÇô3 friendly SMBs, no published price.
+- **Signed letter per customer:** scope, time window, contacts, stop procedure, retention (e.g. purge N days after the pilot ends), and an AI ban.
+- **Deployment:** one instance per pilot (or one with only that customer). The ASTRO analyst is a `cymag` user inside the customer's account, which is visible in their team list and audited. That sidesteps T10 because the review routes already work within one tenant.
+- **Scope:** external perimeter only, on public IPs verified by the letter plus WHOIS/ASN. Internal network only if ASTRO runs a VM on-site; no connector.
+- **Enabled:** manual inventory scan only. AI, autonomous, billing and auto_discover are off (T1).
+- **Deliverable:** analyst-reviewed PDF (T3) plus a meeting, then one revalidation scan 2ÔÇô4 weeks later with a manual diff. Customer portal access is optional and read-only.
+- **Required before the pilot:** T1ÔÇôT6 and T9, a production WSGI server in a single process (because of in-memory state), HTTPS, and one documented restore test.
+- **Measure:** the ┬º7 metrics, and add analyst hours per customer.
+
+## 5. Needs browser, customer or legal review
+
+- Rendered contrast and zoom in both themes, PDF accessibility, and the 320 px tables.
+- Whether `index.html` or the static JS still shows prices or "autonomous pentest" copy.
+- MSP-persona interviews.
+- Legal: authorization letter wording, intrusion-law exposure, LGPD roles (controller vs processor), and the AI provider's data terms.
+- fpdf licensing and maintenance status.
+- How the app is launched today (Flask dev server vs WSGI, number of workers).
