@@ -48,3 +48,51 @@ quando chamado direto, então NÃO era o Defender. Corrigido para `sandbox = "un
   `VULNERABLE` exato. Severidades infladas rebaixadas (EternalBlue crit 9.8→high 8.0 suspected).
 - Removido diretório temporário de teste deixado pelo Codex (`core/checks/.det002-*`).
 - Suíte combinada final: **92 passed**. Pronto para commit (aguardando autorização). Push será feito pelo Codex.
+
+### Push (2026-10-11)
+- Branch `seguranca/p0-tenant-isolation` enviada ao GitHub pelo fundador (git push direto; Credential Manager autenticou). Commit `cf5dcbb`. PR a abrir em: https://github.com/alefkaue/cymag_saas/pull/new/seguranca/p0-tenant-isolation
+
+## Sessão ASTRO — 2026-10-10 — Codex coordenador
+
+- Inventariou/extraiu 3 ZIPs sem sobrescrita; listagens e hashes em materials/inspection-20261010. Revisou tecnologias distintas, documentos de planejamento e SVGs oficiais; decisões em MATERIALS/DESIGN_MERGE.
+- Criou design system aplicado ao frontend Flask: paleta ASTRO, Instrument Sans, mono técnico, temas sistema/claro/escuro persistidos, logo oficial, foco/reduced-motion e console com eventos/timestamps/run ID reais. Não importou telas bancárias ou runtimes dos protótipos.
+- Criou app/dashboard.py e /api/dashboard com métricas persistidas por tenant, status de validação e limitações; demo implementa o mesmo contrato com proveniência sintética e contagens derivadas.
+- Corrigiu UI de achados/evidência e seleção de achado no histórico; preserva scan_id do run autônomo para relatórios. Erros de consulta de escopo e polling agora ficam explícitos.
+- AUTH-008: usuário ativo revalidado, IP de auditoria sem confiar em header, sem organização negado, owner/viewer barrados em início de scans. Testes negativos e de RBAC adicionados.
+- SCAN-008: despacho somente inventário TCP, sem testes de credenciais/payloads/MQTT/planejamento de ataque; até 64 candidatos sem materializar CIDRs enormes; socket 24 workers e Nmap connect limitado. Código legado preservado para revisão, fora do caminho do produto. Cobertura atual publicada por API/áreas. Não anuncia novas vulnerabilidades confirmadas.
+- PDF com paleta monocromática, SVG vetorial oficial e status observação/suspeita/confirmado/não classificado. PDF demo com SVG oficial e identidade atualizada. Guias legados receberam aviso de estado atual.
+
+### Claude Code nesta sessão
+
+Instalação/auth/help verificados; tarefa limitada enviada ao executável real com -p. Processo terminou **exit 1**, **ECONNREFUSED**, **zero tokens**, nenhuma implementação. Codex assumiu somente após o processo terminar. Prompt/resultado preservados para reprodução/revisão manual. Histórico anterior de Claude acima permanece intacto e não representa trabalho novo desta sessão.
+
+### Validação final
+
+- `.venv/Scripts/python.exe docs/agents/run_checks.py`: **110 passed, 13 warnings**, 8,66s; exit 0. Regressões tenant/PDF existentes e novos testes auth/RBAC/dashboard/inventário integrados. Warnings: API ln depreciada do fpdf2; não são erros. Saída em TEST_RESULTS.txt.
+- `node tests/test_frontend_contracts.cjs`: aprovado; demo source sintético, contagens consistentes, zero fetch, tema e persistência.
+- `node --check` em cymag.js, cymag-demo.js e astro-theme.js: aprovado.
+- `git diff --check`: aprovado; apenas avisos Git de normalização CRLF, sem erros de whitespace.
+- Testes convencionais inicialmente falharam ao reabrir diretórios com ACL owner-only criados pelo Python 3.14 neste sandbox. Runner usa novos temporários no workspace com ACL herdada, sem alterar permissões do sistema ou da aplicação.
+- Não realizado: browser E2E/QA visual/contraste completo, scans contra infraestrutura real, carga, recuperação de worker, staging/deploy. Não declarar produção pronta. Nenhum commit/push realizado; alteração prévia do usuário preservada.
+
+## Atualização 2026-10-11 — pacote de redesign
+
+Integração detalhada e resultados em [REDESIGN.md](REDESIGN.md): navegação por URLs, avaliações com wizard/detalhe, API tenant-scoped, escopos com autorização owner e viewer somente leitura. Implementação por Codex. Claude executado pelo shell terminou exit 1 / ECONNREFUSED, sem alterações. 113 testes Python e contratos frontend passaram. QA visual continua pendente: Edge falhou por acesso negado e exibiu 0x80000003; não contornar proteções do ambiente. Scanner e dados reais preservados nesta etapa.
+
+Colaboracao Claude confirmada no terminal do usuario; parecer concluido e correcoes verificadas/integradas por Codex. Detalhes e decisoes F1-F10 em CLAUDE_REVIEW_INTEGRATION.md. Suite: 114 testes Python passaram; QA visual pendente.
+
+Pesquisa de plataformas e UX concluida por Codex; plano em PRODUCT_PLAN.md. Script agora aceita -Task product-plan e restringe Claude ao novo documento de revisao, sem sobrescrever parecer anterior. Sintaxe validada; tarefa Claude preparada para terminal normal, execucao nao confirmada.
+
+Plano conjunto Claude+Codex integrado. Claude revisou e retornou parecer; Write negado, Codex salvou resultado sem contornar permissoes. Codex implementou isolamento da revisao gerenciada e transicoes atomicas; ver PRODUCT_PLAN_INTEGRATION.md.
+
+## Experiencias por perfil — 2026-10-11
+
+Implementacao Codex em EXPERIENCE_UI.md: sidebar por funcao, panorama executivo, centro operacional, galeria de relatorios e escopos em duas colunas. Dados das APIs existentes, sem alterar permissoes/scanner. Contratos frontend/boot/experiencia passaram; 8 regressoes Python passaram. Browser visual permanece pendente; Claude tem tarefa de revisao somente leitura preparada (-Task experience), ainda nao executada.
+
+Analise de produto/comercializacao concluida por Codex em COMMERCIAL_READINESS.md com fontes NIST/W3C/OWASP/ANPD, gates, jornada e configuracoes. Ajustes seguros de leitura/contraste aplicados; testes frontend passaram; browser/cliente nao testado. Claude commercial preparado para terminal normal.
+
+2026-10-11: Integrada revisao comercial concluida por Claude (somente leitura). Codex removeu inferencias financeiras/probabilidades offline, estimativas para observacoes e promessa de conformidade do catalogo. Suite: 118 testes passaram; QA visual pendente. Detalhes em COMMERCIAL_REVIEW_INTEGRATION.md.
+
+2026-10-11: Codex implementou gates de implantacao, bloqueio de billing simulado/discovery hospedados e bloqueio de rede do AEGIS desabilitado. 124 testes Python e 3 suites JS passaram. Claude shell sem resposta interrompido exit 1; tarefa pilot-security preparada para terminal autenticado. Ver PILOT_SECURITY.md.
+
+2026-10-11: Contencao defensiva implementada: redes especiais/IPv6 rejeitados, allow/deny, limite 64 sem truncamento, max_ips e refiltro de hosts. 139 testes passaram; nenhum scan externo. Parecer de Claude preservado.

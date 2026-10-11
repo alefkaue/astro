@@ -107,12 +107,16 @@ ESTIMATE_DISCLAIMER = (
 def loss_estimate(finding: Dict) -> Tuple[int, int]:
     """Faixa de prejuízo ESTIMADO (min, max) em BRL caso o problema não seja
     corrigido. Heurística para priorização — ver `ESTIMATE_DISCLAIMER`."""
+    if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info":
+        return (0, 0)
     f = _SEV_LOSS.get(finding.get("sev", "info"), 0.2)
     return _scale(_area(finding)["loss"], f)
 
 
 def fix_cost(finding: Dict) -> Tuple[int, int]:
     """Custo estimado (min, max) em BRL para corrigir o problema."""
+    if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info":
+        return (0, 0)
     f = _SEV_FIX.get(finding.get("sev", "info"), 0.5)
     return _scale(_area(finding)["fix_cost"], f)
 
@@ -146,10 +150,10 @@ def business_item(finding: Dict, finding_id: Optional[int] = None) -> Dict:
         "severity_label": _SEV_PT.get(finding.get("sev", "info"), "Informativo"),
         "host": finding.get("host"),
         "port": finding.get("port"),
-        "problem": area["problem"],
+        "problem": "Serviço observado; requer validação de contexto e necessidade de exposição." if finding.get("verification_status") == "observation" or finding.get("sev", "info") == "info" else area["problem"],
         "fix": area["fix"],
-        "loss_min": loss[0], "loss_max": loss[1], "loss_label": brl_range(loss),
-        "fix_cost_min": fix[0], "fix_cost_max": fix[1], "fix_cost_label": brl_range(fix),
+        "loss_min": loss[0], "loss_max": loss[1], "loss_label": brl_range(loss) if loss != (0, 0) else "Não estimado",
+        "fix_cost_min": fix[0], "fix_cost_max": fix[1], "fix_cost_label": brl_range(fix) if fix != (0, 0) else "Não estimado",
         # Honestidade (DET-001): todo valor em R$ é explicitamente marcado como estimativa.
         "is_estimate": True,
         "estimate_disclaimer": ESTIMATE_DISCLAIMER,

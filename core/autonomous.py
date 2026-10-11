@@ -65,16 +65,15 @@ class AutonomousEngine:
 
         # 2ª barreira de escopo: mesmo com o alvo já validado, re-filtramos os
         # hosts efetivamente descobertos para nunca tocar algo fora do contrato.
-        if self.scope:
-            before = len(self.hosts)
-            self.hosts = hosts_in_scope(self.hosts, self.scope)
-            dropped = before - len(self.hosts)
-            if dropped:
-                self._emit("recon",
-                           f"{dropped} host(s) descartado(s) por estarem fora do escopo autorizado.",
-                           {"dropped": dropped})
+        before = len(self.hosts)
+        self.hosts = hosts_in_scope(self.hosts, self.scope)
+        dropped = before - len(self.hosts)
+        if dropped:
+            self._emit("recon",
+                       f"{dropped} host(s) descartado(s) por estarem fora do escopo autorizado.",
+                       {"dropped": dropped})
 
-        self._emit("recon", f"{len(self.hosts)} host(s) ativo(s).",
+        self._emit("recon", f"{len(self.hosts)} candidato(s) dentro do escopo; disponibilidade ainda não comprovada.",
                    {"hosts": self.hosts[:self.max_hosts]})
 
         engine = ExploitEngine()
@@ -94,7 +93,7 @@ class AutonomousEngine:
             if not services:
                 continue
 
-            self._emit("exploit", f"Analisando vulnerabilidades em {host}…", {"host": host})
+            self._emit("inventory", f"Registrando serviços observados em {host}…", {"host": host})
             for port, info in sorted(services.items()):
                 for f in engine.check(host, int(port), info.get("banner", "")):
                     f["host"] = host
@@ -109,13 +108,6 @@ class AutonomousEngine:
 
         # ── Fase 4: Decisão por IA (plano de ataque) ──────────────────────────
         plan = None
-        if self.ai_planner and self.findings:
-            self._emit("ai", "AEGIS planejando a cadeia de ataque…")
-            try:
-                plan = self.ai_planner(self.findings)
-            except Exception as e:
-                self._emit("error", f"Planejamento da IA falhou: {e}")
-            self._emit("ai", "Plano de ataque " + ("gerado." if plan else "indisponível (modo offline)."))
 
         # ── Fase 5: Relatório final ────────────────────────────────────────────
         report = self._build_report(plan)
@@ -139,4 +131,6 @@ class AutonomousEngine:
             "top_findings": top,
             "findings": self.findings,
             "attack_plan": plan,
+            "assessment_profile": "defensive_inventory",
+            "limitations": ["Somente inventário TCP; checagens de vulnerabilidade intrusivas não executadas."],
         }

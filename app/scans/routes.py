@@ -31,6 +31,7 @@ def api_areas():
 
 @scans_bp.route("/api/scan", methods=["POST"])
 @login_required
+@role_required("operator", "cymag")
 @enforce_scan_quota
 def api_scan():
     """Scan completo: descoberta → port scan → exploit/enum → risco executivo.
@@ -242,13 +243,15 @@ def api_scan_findings(scan_id: int):
 # ─── VALIDAÇÃO HUMANA (plano Gerenciado+) ───────────────────────────────────────
 
 @scans_bp.route("/api/reviews")
+@login_required
 @role_required("cymag")
 def api_review_queue():
     """Fila de scans aguardando validação humana (analista/admin)."""
-    return jsonify({"queue": db.list_review_queue()})
+    return jsonify({"queue": db.list_review_queue(account_id=current_account_id())})
 
 
 @scans_bp.route("/api/scans/<int:scan_id>/review", methods=["POST"])
+@login_required
 @role_required("cymag")
 def api_submit_review(scan_id: int):
     """Analista valida um scan: marca como 'reviewed' ou assina o laudo ('signed')."""
@@ -257,12 +260,13 @@ def api_submit_review(scan_id: int):
     if status not in ("reviewed", "signed"):
         return jsonify({"error": "status deve ser 'reviewed' ou 'signed'."}), 400
 
-    scan = db.get_scan(scan_id)
+    scan = db.get_scan(scan_id, account_id=current_account_id())
     if not scan:
         return jsonify({"error": "Scan não encontrado."}), 404
 
     uid = session.get("uid")
     notes = (body.get("notes") or "").strip()
-    db.set_review_status(scan_id, status, reviewed_by=uid, notes=notes)
+    if not db.review_scan_scoped(scan_id, current_account_id(), status, uid, notes):
+        return jsonify({"error": "Avaliação não concluída ou transição de revisão inválida."}), 409
     db.audit(uid, "scan_review", f"scan={scan_id} status={status}", request.remote_addr or "")
     return jsonify({"scan_id": scan_id, "review_status": status, "reviewed_by": uid})

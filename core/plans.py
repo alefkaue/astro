@@ -71,7 +71,7 @@ PLANS = {
         features=frozenset({FEATURE_AUTONOMOUS}),
         scans_per_month=10, max_ips=256,
         report_level="clean", managed_cadence_days=0,
-        tagline="O agente autônomo na mão da sua equipe. Você mesmo roda.",
+        tagline="Avaliações defensivas orquestradas em escopos autorizados.",
         audience="PME que quer autonomia sem contratar um time",
     ),
     "profissional": Plan(
@@ -89,7 +89,7 @@ PLANS = {
         features=frozenset({FEATURE_AUTONOMOUS, FEATURE_AI, FEATURE_TRAINING, FEATURE_MANAGED}),
         scans_per_month=None, max_ips=None,
         report_level="signed", managed_cadence_days=60,
-        tagline="A CYMAG faz o pentest a cada 2 meses e assina o laudo (LGPD/ISO/PCI).",
+        tagline="Avaliação defensiva assistida e revisão técnica; contratação e escopo a validar.",
         audience="PME que precisa de laudo e acompanhamento recorrente",
     ),
     "enterprise": Plan(
@@ -98,7 +98,7 @@ PLANS = {
         features=frozenset({FEATURE_AUTONOMOUS, FEATURE_AI, FEATURE_TRAINING, FEATURE_MANAGED}),
         scans_per_month=None, max_ips=None,
         report_level="white_label", managed_cadence_days=30,
-        tagline="Contínuo, dedicado, integrações e OT/IoT. Sob consulta.",
+        tagline="Escopo e serviços personalizados mediante avaliação e contratação.",
         audience="Empresas maiores, financeiro e ambientes OT/IoT",
     ),
 }

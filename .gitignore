@@ -8,6 +8,8 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.test-runtime/
+.test-tmp/
 
 # Segredos e dados locais
 .env
@@ -28,3 +30,8 @@ scanner_go/cymag_scan.exe
 .DS_Store
 .vscode/
 .idea/
+
+# Logs brutos de sessoes de agentes (IDs de sessao/metadados locais)
+docs/agents/*_STREAM.jsonl
+docs/agents/*_RESULT.json
+docs/agents/CLAUDE_RETRY_*.json

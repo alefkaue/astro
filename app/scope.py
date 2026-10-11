@@ -10,6 +10,9 @@ rota consegue varrer um alvo sem um contrato autorizado que o contenha.
 from typing import Dict, Optional, Tuple
 
 from app import db
+from app.config import config
+from core.plans import get_plan
+from core.scope import assert_safe_target, candidate_count
 from core.scope import hosts_in_scope, target_in_scope, valid_scope
 
 __all__ = [
@@ -80,4 +83,14 @@ def resolve_authorized_target(
             f"Alvo {target} fora do escopo autorizado do engagement.", 403
         )
 
+    try:
+        assert_safe_target(target, hosted=config.ENV not in ("development", "test", "demo"))
+    except (ValueError, TypeError):
+        raise ScopeError("Alvo proibido, politica invalida ou faixa excede 64 candidatos.", 400)
+    account = db.get_account(account_id)
+    if not account:
+        raise ScopeError("Conta nao encontrada.", 403)
+    limit = get_plan(account.get("plan")).max_ips
+    if limit is not None and candidate_count(target) > limit:
+        raise ScopeError("Alvo excede o limite de IPs do plano.", 403)
     return eng, target

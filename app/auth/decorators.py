@@ -12,7 +12,8 @@ def current_user():
     uid = session.get("uid")
     if not uid:
         return None
-    return db.get_user(uid)
+    user = db.get_user(uid)
+    return user if user and user["active"] else None
 
 
 def current_account_id():
@@ -45,7 +46,7 @@ def requires_feature(feature: str):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            if not session.get("uid"):
+            if not current_user():
                 return jsonify({"error": "Não autenticado"}), 401
             plan = current_plan()
             if not plan.has(feature):
@@ -65,7 +66,7 @@ def enforce_scan_quota(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
         uid = session.get("uid")
-        if not uid:
+        if not current_user():
             return jsonify({"error": "Não autenticado"}), 401
         limit = current_plan().scans_per_month
         if limit is not None:
@@ -82,8 +83,10 @@ def enforce_scan_quota(fn):
 def login_required(fn):
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        if not session.get("uid"):
+        if not current_user():
             return jsonify({"error": "Não autenticado"}), 401
+        if current_account_id() is None:
+            return jsonify({"error": "Usuário sem organização associada"}), 403
         return fn(*args, **kwargs)
     return wrapper
 
@@ -106,4 +109,5 @@ def role_required(*roles):
 
 
 def client_ip() -> str:
-    return request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
+    # No trusted reverse proxy is configured. Header values are attacker-controlled.
+    return request.remote_addr or ""

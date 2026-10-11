@@ -16,7 +16,7 @@ from app import db
 from app.ai.aegis import AEGIS_SECOPS, aegis, sanitize_finding
 from app.auth.decorators import (current_account_id, current_plan,
                                  enforce_scan_quota, login_required,
-                                 requires_feature)
+                                 requires_feature, role_required)
 from app.autonomous import runner
 from app.scope import ScopeError, resolve_authorized_target
 from core.plans import FEATURE_AUTONOMOUS, FEATURE_MANAGED
@@ -52,6 +52,7 @@ def _ai_planner(findings: List[Dict]) -> Optional[Dict]:
 
 @autonomous_bp.route("/api/autonomous/run", methods=["POST"])
 @login_required
+@role_required("operator", "cymag")
 @requires_feature(FEATURE_AUTONOMOUS)
 @enforce_scan_quota
 def start_run():

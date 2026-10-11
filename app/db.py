@@ -412,13 +412,22 @@ def get_engagement(engagement_id: int, account_id: Optional[int] = None) -> Opti
     return _row_to_engagement(r) if r else None
 
 
-def authorize_engagement(engagement_id: int, authorized_by: int) -> None:
+def authorize_engagement(engagement_id: int, authorized_by: int, account_id: Optional[int] = None) -> bool:
+    # Legacy internal callers derive tenant from the authorizer, never unscoped.
+    authorizer = get_user(authorized_by)
+    if not authorizer or not authorizer["active"] or authorizer["account_id"] is None:
+        return False
+    if account_id is None:
+        account_id = authorizer["account_id"]
+    if account_id != authorizer["account_id"]:
+        return False
     with _LOCK, get_conn() as conn:
-        conn.execute(
-            "UPDATE engagements SET status='authorized', authorized_by=?, authorized_at=? WHERE id=?",
-            (authorized_by, _now(), engagement_id),
+        updated = conn.execute(
+            "UPDATE engagements SET status='authorized', authorized_by=?, authorized_at=? WHERE id=? AND account_id=?",
+            (authorized_by, _now(), engagement_id, account_id),
         )
         conn.commit()
+        return updated.rowcount == 1
 
 
 # ─── SCANS / FINDINGS ───────────────────────────────────────────────────────────
@@ -607,12 +616,31 @@ def set_review_status(scan_id: int, status: str, reviewed_by: Optional[int] = No
         conn.commit()
 
 
-def list_review_queue(limit: int = 50) -> List[Dict]:
+def review_scan_scoped(scan_id: int, account_id: Optional[int], status: str,
+                       reviewed_by: int, notes: Optional[str] = None) -> bool:
+    """Atomic tenant-filtered transition; signing requires prior human review."""
+    if account_id is None or status not in ("reviewed", "signed"):
+        return False
+    expected = "pending" if status == "reviewed" else "reviewed"
+    with _LOCK, get_conn() as conn:
+        changed = conn.execute(
+            "UPDATE scans SET review_status=?, reviewed_by=?, reviewed_at=?, review_notes=? "
+            "WHERE id=? AND account_id=? AND status='done' AND review_status=?",
+            (status, reviewed_by, _now(), notes, scan_id, account_id, expected),
+        )
+        conn.commit()
+        return changed.rowcount == 1
+
+
+def list_review_queue(limit: int = 50, account_id: Optional[int] = None) -> List[Dict]:
     """Scans aguardando validação humana (mais recentes primeiro)."""
+    if account_id is None:
+        return []
     with get_conn() as conn:
         rows = conn.execute(
-            "SELECT * FROM scans WHERE review_status='pending' ORDER BY id DESC LIMIT ?",
-            (limit,),
+            "SELECT * FROM scans WHERE review_status='pending' AND status='done' "
+            "AND account_id=? ORDER BY id DESC LIMIT ?",
+            (account_id, limit),
         ).fetchall()
     return [dict(r) for r in rows]
 

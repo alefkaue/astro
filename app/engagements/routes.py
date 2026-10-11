@@ -32,7 +32,7 @@ def list_engagements():
 
 
 @engagements_bp.route("/api/engagements", methods=["POST"])
-@login_required
+@role_required("owner", "operator", "cymag", "admin")
 def create_engagement():
     body = request.get_json(force=True) or {}
     name = (body.get("name") or "").strip()
@@ -69,6 +69,7 @@ def get_engagement(eid: int):
 
 
 @engagements_bp.route("/api/engagements/<int:eid>/authorize", methods=["POST"])
+@login_required
 @role_required("owner", "admin")
 def authorize_engagement(eid: int):
     """Autoriza o engagement — libera operações no escopo. Sempre dentro do tenant:
@@ -77,6 +78,7 @@ def authorize_engagement(eid: int):
     eng = db.get_engagement(eid, account_id=current_account_id())
     if not eng:
         return jsonify({"error": "Engagement não encontrado."}), 404
-    db.authorize_engagement(eid, authorized_by=session.get("uid"))
+    if not db.authorize_engagement(eid, authorized_by=session.get("uid"), account_id=current_account_id()):
+        return jsonify({"error": "Engagement não encontrado."}), 404
     db.audit(session.get("uid"), "engagement_authorize", f"id={eid}")
     return jsonify(db.get_engagement(eid, account_id=current_account_id()))

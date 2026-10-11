@@ -41,6 +41,8 @@ def create_app() -> Flask:
     )
 
     # ── Banco e IA ────────────────────────────────────────────────────────────
+    from app.features import init_app as init_features
+    init_features(app)
     from app import db
     db.init_db()
 
@@ -53,12 +55,14 @@ def create_app() -> Flask:
     from app.autonomous import autonomous_bp
     from app.billing import billing_bp
     from app.engagements import engagements_bp
+    from app.dashboard import dashboard_bp
+    from app.assessment_views import assessment_views_bp
     from app.main import main_bp
     from app.owner import owner_bp
     from app.reports import reports_bp
     from app.scans import scans_bp
 
-    for bp in (main_bp, auth_bp, scans_bp, engagements_bp, autonomous_bp,
+    for bp in (main_bp, dashboard_bp, assessment_views_bp, auth_bp, scans_bp, engagements_bp, autonomous_bp,
                owner_bp, billing_bp, reports_bp, admin_bp):
         app.register_blueprint(bp)
 

@@ -10,6 +10,7 @@ Modos:
 import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Optional
 
 logger = logging.getLogger("cymag.pdf")
@@ -23,18 +24,19 @@ except ImportError:
 
 
 # ─── CONSTANTES DE COR ───────────────────────────────────────────────────────
-C_DARK   = (7,   12,  20)
-C_SURF   = (13,  23,  36)
-C_BLUE   = (82,  201, 255)
-C_GREEN  = (70,  223, 161)
-C_RED    = (255, 104, 114)
-C_YELLOW = (245, 166, 35)
-C_MUTED  = (100, 120, 140)
+C_DARK   = (10, 10, 10)
+C_SURF   = (20, 20, 20)
+C_BLUE   = (140, 140, 140)  # Legacy token name; monochrome presentation.
+C_GREEN  = (31, 157, 85)
+C_RED    = (217, 48, 37)
+C_YELLOW = (183, 121, 31)
+C_MUTED  = (107, 107, 107)
 C_WHITE  = (255, 255, 255)
-C_LIGHT  = (235, 240, 248)
+C_LIGHT  = (242, 242, 242)
+_LOGO = Path(__file__).resolve().parents[2] / "static" / "brand" / "logo-astro-branco.svg"
 
 SEV_LABEL = {"crit": "CRITICO", "high": "ALTO", "med": "MEDIO", "low": "BAIXO", "info": "INFO"}
-SEV_COLOR = {"crit": C_RED, "high": C_YELLOW, "med": C_BLUE, "low": C_GREEN, "info": C_MUTED}
+SEV_COLOR = {"crit": C_RED, "high": C_YELLOW, "med": C_YELLOW, "low": C_MUTED, "info": C_MUTED}
 
 
 # ─── CLASSE BASE DO PDF ───────────────────────────────────────────────────────
@@ -51,11 +53,12 @@ class CYMAGReport(FPDF):
         # Barra de topo escura
         self.set_fill_color(*C_DARK)
         self.rect(0, 0, 210, 16, 'F')
-        # Logo texto
+        # Official vector artwork; do not recreate the wordmark with a font.
+        self.image(str(_LOGO), x=10, y=5, w=25)
         self.set_text_color(*C_BLUE)
         self.set_font("Helvetica", "B", 9)
-        self.set_xy(10, 4)
-        self.cell(80, 8, "CYMAG ENTERPRISE")
+        self.set_xy(39, 4)
+        self.cell(40, 8, "CYBER")
         # Alvo no centro
         self.set_text_color(*C_MUTED)
         self.set_font("Helvetica", "", 7.5)
@@ -82,7 +85,7 @@ class CYMAGReport(FPDF):
         self.set_font("Helvetica", "I", 7.5)
         self.set_text_color(*C_MUTED)
         self.set_y(-11)
-        self.cell(0, 5, f"Confidencial  ·  CYMAG Enterprise v2.0  ·  Página {self.page_no()}", align="C")
+        self.cell(0, 5, f"Confidencial  ·  ASTRO Cyber  ·  Página {self.page_no()}", align="C")
 
 
 # ─── HELPERS ─────────────────────────────────────────────────────────────────
@@ -142,7 +145,8 @@ def _build_cover(pdf: CYMAGReport, target: str, findings: list, score: int,
     pdf.set_xy(10, 20)
     pdf.set_text_color(*C_BLUE)
     pdf.set_font("Helvetica", "B", 26)
-    pdf.cell(0, 12, "CYMAG Enterprise", ln=True)
+    pdf.image(str(_LOGO), x=10, y=23, w=58)
+    pdf.cell(0, 12, "", ln=True)
 
     pdf.set_x(10)
     pdf.set_text_color(*C_WHITE)
@@ -208,7 +212,7 @@ def _build_cover(pdf: CYMAGReport, target: str, findings: list, score: int,
 # ─── TABELA DE VULNERABILIDADES ───────────────────────────────────────────────
 
 def _build_vulns_table(pdf: FPDF, findings: list):
-    _section_title(pdf, "Vulnerabilidades Tecnicas",
+    _section_title(pdf, "Achados e Observacoes Tecnicas",
                    f"Total: {len(findings)} | "
                    f"Criticas: {sum(1 for f in findings if f.get('sev')=='crit')} | "
                    f"Altas: {sum(1 for f in findings if f.get('sev')=='high')}")
@@ -216,7 +220,7 @@ def _build_vulns_table(pdf: FPDF, findings: list):
     if not findings:
         pdf.set_font("Helvetica", "I", 9)
         pdf.set_text_color(*C_MUTED)
-        pdf.cell(0, 8, "Nenhuma vulnerabilidade encontrada.", ln=True)
+        pdf.cell(0, 8, "Nenhum achado registrado. Ausencia de achados nao comprova seguranca.", ln=True)
         pdf.ln(4)
         return
 
@@ -238,18 +242,18 @@ def _build_vulns_table(pdf: FPDF, findings: list):
         if pdf.get_y() > 265:
             pdf.add_page()
 
-        bg = (248, 250, 255) if i % 2 == 0 else C_WHITE
+        bg = C_LIGHT if i % 2 == 0 else C_WHITE
         pdf.set_fill_color(*bg)
         sev    = v.get("sev", "low")
         sc_col = _sev_color(sev)
 
         row = [
-            _safe(v.get("cve") or f"CYM-{str(i+1).zfill(3)}", 26),
+            _safe(v.get("cve") or f"AST-{str(i+1).zfill(3)}", 26),
             _safe(f"{v.get('host','?')}:{v.get('port','?')}", 34),
             _safe(v.get("title",""), 62),
             SEV_LABEL.get(sev, "N/A"),
             str(v.get("cvss","N/A")),
-            "ABERTA",
+            {"confirmed":"CONFIRMADO", "suspected":"SUSPEITA", "observation":"OBSERVACAO"}.get(v.get("verification_status"), "NAO CLASSIF."),
         ]
 
         for j, (w, cell) in enumerate(zip(cols, row)):
@@ -267,7 +271,7 @@ def _build_vulns_table(pdf: FPDF, findings: list):
 
 def _build_exec_table(pdf: FPDF, exec_risks: list):
     _section_title(pdf, "Riscos de Negocio",
-                   "Impacto financeiro e regulatorio estimado pelo AEGIS")
+                   "Contexto requer validacao; impacto financeiro nao estimado")
 
     if not exec_risks:
         pdf.set_font("Helvetica", "I", 9)
@@ -296,7 +300,7 @@ def _build_exec_table(pdf: FPDF, exec_risks: list):
         pdf.set_text_color(*C_MUTED)
         pdf.cell(10, 5, "")
         pdf.cell(0, 5,
-                 f"Categoria: {cat}  |  Probabilidade: {prob}  |  Impacto estimado: {impact}",
+                 f"Categoria: {cat}  |  Impacto: {impact}",
                  ln=True)
         pdf.ln(1)
 

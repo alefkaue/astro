@@ -18,3 +18,19 @@ Fonte dos achados: `docs/audit/2026-10-baseline.md`. OWASP ASVS v5 / API Top 10 
 | A12 | Quota por usuário, não conta | lógica | DONE | SEC-003 (por conta) |
 
 Cada correção exige teste de regressão antes de marcar `done`.
+
+## Revisão nesta sessão ASTRO
+
+Corrigido com regressões: X-Forwarded-For não confiável ignorado; autenticação revalida usuário ativo em todas as gates; usuário sem organização não pode usar rotas login_required; viewer/owner não iniciam scans diretamente; achados legados não tratados como confirmados; despacho de checks intrusivos desativado; candidato CIDR limitado sem alocar rede inteira.
+
+Preservado: isolamento existente e relatórios por scan_id; testes cross-tenant aprovados. Nenhuma varredura contra ativos externos executada nesta sessão. SVGs oficiais inspecionados (paths, viewBox, ausência de script/event handler/referência externa).
+
+Riscos abertos: CSRF/rate limiting, chave IA em JSON, remediação com payload do cliente, RBAC administrativo/delegação, autorização temporal/prova de controle, escopo de egress, redes OT/cloud metadata, concorrência/quota atômica, jobs/eventos em memória, limitação/timeout global, partial/skipped por check, falta de cancelamento e recuperação. Nmap/port scan ainda é operação ativa e não deve ser vendido como passivo. Perfil TCP não substitui uma avaliação de vulnerabilidades.
+
+Não declarar produto pronto para produção ou piloto remunerado com base nestes testes. Fontes de planejamento bancário ficam arquivadas; não entram em rotas ou APIs.
+
+## Atualização 2026-10-11 — pacote de redesign
+
+Integração detalhada e resultados em [REDESIGN.md](REDESIGN.md): navegação por URLs, avaliações com wizard/detalhe, API tenant-scoped, escopos com autorização owner e viewer somente leitura. Implementação por Codex. Claude executado pelo shell terminou exit 1 / ECONNREFUSED, sem alterações. 113 testes Python e contratos frontend passaram. QA visual continua pendente: Edge falhou por acesso negado e exibiu 0x80000003; não contornar proteções do ambiente. Scanner e dados reais preservados nesta etapa.
+
+Revisao PLAN-CLAUDE-01: corrigido vazamento cross-tenant na fila/assinatura de revisoes; login_required e UPDATE atomico tenant/status, regressao tests/test_managed_review_isolation.py. Achado estrangeiro no owner/budget agora 404. Assignments, entitlement managed, bypass admin e CSRF continuam abertos. Detalhes em PRODUCT_PLAN_INTEGRATION.md.

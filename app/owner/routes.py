@@ -123,7 +123,7 @@ def owner_budget():
     if owner_acc is None:
         return jsonify({"error": "Problema não encontrado."}), 404
     if owner_acc != acc_id:
-        return jsonify({"error": "Este problema não pertence à sua conta."}), 403
+        return jsonify({"error": "Problema não encontrado."}), 404
 
     uid = session.get("uid")
     db.set_budget_decision(acc_id, finding_id, status, budget, decided_by=uid, note=note)

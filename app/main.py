@@ -17,7 +17,13 @@ _ROOT = Path(__file__).resolve().parent.parent
 
 
 @main_bp.route("/")
-def index():
+@main_bp.route("/login")
+@main_bp.route("/demo")
+@main_bp.route("/app")
+@main_bp.route("/app/<path:page>")
+def index(page=None):
+    if page and "static" in page.split("/"):
+        return jsonify({"error": "Recurso estático não encontrado"}), 404
     return send_from_directory(_ROOT, "index.html")
 
 

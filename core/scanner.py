@@ -17,8 +17,8 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 from core.fallback import FallbackChain
-from core.exploit_engine import ExploitEngine
-from core.scope import hosts_in_scope
+from core.exploit_engine import ExploitEngine, INVENTORY_PORTS
+from core.scope import hosts_in_scope, assert_safe_target
 from core.severity import risk_score as _risk_score
 
 logger = logging.getLogger("cymag.scanner")
@@ -33,24 +33,15 @@ except ImportError:
 # ─── CONFIGURAÇÃO ─────────────────────────────────────────────────────────────
 
 SOCKET_TIMEOUT  = 1.5
-SOCKET_WORKERS  = 150
+SOCKET_WORKERS  = 24
 
 # Portas alvo — expandido para cobrir serviços críticos
-TARGET_PORTS = [
-    21, 22, 23, 25, 53, 80, 110, 135, 139, 143,
-    443, 445, 993, 995, 1099, 1433, 1880, 1883,
-    2049, 3306, 3307, 3389, 5432, 5900, 5985, 5986,
-    6379, 8080, 8443, 8883, 9001, 9200, 11211, 27017,
-]
+TARGET_PORTS = list(INVENTORY_PORTS)
 PORTS_STR = ",".join(map(str, TARGET_PORTS))
 
 # Estratégias Nmap para PORT SCAN  (ordem: mais rico → mais compatível)
 NMAP_PORT_STRATEGIES = [
-    ("syn_sV_OS",    f"-Pn -sS -sV -O --open -T4 --version-intensity 7 -p {PORTS_STR}"),
-    ("connect_sV",   f"-Pn -sT -sV --open -T4 --version-intensity 5 -p {PORTS_STR}"),
-    ("fast_sV",      f"-Pn -sV --open -T3 --version-intensity 3 -p {PORTS_STR}"),
-    ("minimal_Pn",   f"-Pn --open -T3 -p {PORTS_STR}"),
-    ("ultra_fast",   f"-Pn --open -T5 -p {PORTS_STR}"),
+    ("bounded_connect", f"-Pn -sT --open -T2 --max-retries 1 --host-timeout 30s -p {PORTS_STR}"),
 ]
 
 # Estratégias Nmap para DESCOBERTA de hosts
@@ -99,7 +90,7 @@ class CYMAGScanner:
             logger.warning("[scanner] Nenhum host encontrado. Encerrando.")
             return []
 
-        logger.info("[scanner] Hosts ativos: %s", self.hosts_up)
+        logger.info("[scanner] Candidatos de inventário no escopo: %s", self.hosts_up)
 
         for host in self.hosts_up:
             self._log_header(f"FASE 2 — Port Scan → {host}")
@@ -111,7 +102,7 @@ class CYMAGScanner:
 
             logger.info("[scanner] Portas abertas em %s: %s", host, sorted(services.keys()))
 
-            self._log_header(f"FASE 3 — Exploração → {host}")
+            self._log_header(f"FASE 3 — Inventário defensivo → {host}")
             for port, info in sorted(services.items()):
                 banner = info.get("banner", "")
                 port_findings = self._engine.check(host, int(port), banner)
@@ -152,32 +143,20 @@ class CYMAGScanner:
     def _discover(self):
         self._discover_raw()
         # Barreira de escopo: descarta qualquer host descoberto fora do contrato
-        # autorizado. Escopo vazio (scan sem engagement) não filtra.
-        if self.scope:
-            before = len(self.hosts_up)
-            self.hosts_up = hosts_in_scope(self.hosts_up, self.scope)
-            dropped = before - len(self.hosts_up)
-            if dropped:
-                logger.warning("[scanner] %d host(s) fora do escopo descartado(s).", dropped)
+        # autorizado. A politica de seguranca tambem vale com escopo vazio.
+        before = len(self.hosts_up)
+        self.hosts_up = hosts_in_scope(self.hosts_up, self.scope)
+        dropped = before - len(self.hosts_up)
+        if dropped:
+            logger.warning("[scanner] %d host(s) fora do escopo descartado(s).", dropped)
 
     def _discover_raw(self):
-        if self._nm:
-            strategies = [
-                (name, lambda a=args: self._nmap_discover(a))
-                for name, args in NMAP_DISCOVERY_STRATEGIES
-            ]
-            result, used = self._fallback.run(strategies, default=[])
-            if result:
-                self.hosts_up = result
-                logger.info("[scanner] Descoberta via '%s': %d host(s)", used, len(result))
-                return
-
-        # Fallback direto: sem Nmap
-        logger.info("[scanner] Nmap indisponível — usando inferência direta de hosts.")
+        # Inventory candidates are bounded before network probes.
+        assert_safe_target(self.target)
         try:
             if "/" in self.target:
                 net = ipaddress.ip_network(self.target, strict=False)
-                self.hosts_up = [str(h) for h in list(net.hosts())[:256]]
+                self.hosts_up = [str(h) for h in net.hosts()]
             else:
                 self.hosts_up = [self.target.split("/")[0]]
         except ValueError:
@@ -191,11 +170,10 @@ class CYMAGScanner:
     # ─── FASE 2 — PORT SCAN ───────────────────────────────────────────────────
 
     def _scan_host(self, host: str) -> Dict[int, Dict]:
-        # 1. Tentar Go scanner (rápido, banner grabbing nativo)
-        go = self._go_scan(host)
-        if go:
-            logger.info("[scanner] Port scan via Go binary: %d porta(s)", len(go))
-            return go
+        assert_safe_target(host)
+        if self.scope and not hosts_in_scope([host], self.scope):
+            raise ValueError("Host outside authorized scope.")
+        # Bounded TCP inventory; the legacy Go probe path is not invoked.
 
         # 2. Tentar estratégias Nmap
         if self._nm:
