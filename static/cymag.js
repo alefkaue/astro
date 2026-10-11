@@ -1274,9 +1274,12 @@ async function downloadPDF(kind) {
   // No modo demonstração não há backend/fpdf: geramos um relatório imprimível no
   // navegador (o usuário salva como PDF pelo diálogo de impressão).
   if (isDemo()) { openPrintableReport(s, kind); return; }
+  if (!s.scan_id) { toast("Scan sem identificador — rode o scan novamente.", "err"); return; }
   toast("Gerando PDF…", "info");
-  const body = { target: s.target, findings: s.cyber_vulns, exec_risks: s.exec_risks || [], score: s.risk_score };
-  if (kind === "detailed") body.instructions = "Relatório profissional de segurança do CYMAG.";
+  // SEC-006: o laudo é montado no backend a partir do scan_id (dados persistidos do
+  // tenant), não de findings enviados pelo cliente.
+  const body = { scan_id: s.scan_id };
+  if (kind === "detailed") body.instructions = "Relatório profissional de segurança.";
   try {
     const r = await fetch("/api/report/" + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     if (!r.ok) { const e = await r.json().catch(() => ({})); toast(e.error || "Falha ao gerar PDF.", "err"); return; }

@@ -31,26 +31,36 @@ class ScopeError(Exception):
 
 
 def resolve_authorized_target(
-    engagement_id: Optional[int], target: str
+    account_id: Optional[int], engagement_id: Optional[int], target: str
 ) -> Tuple[Dict, str]:
-    """Valida Engagement + alvo e devolve (engagement, alvo_resolvido).
+    """Valida tenant + Engagement + alvo e devolve (engagement, alvo_resolvido).
+
+    `account_id` é o tenant do usuário que dispara a varredura. O engagement PRECISA
+    pertencer a esse tenant — um usuário não pode varrer usando o contrato autorizado
+    de outra empresa (BOLA). Engagement de outro tenant responde 404 (não revela
+    existência).
 
     Levanta `ScopeError` (com `.status`) quando:
-      - falta engagement_id                        → 400
-      - engagement não existe                       → 404
+      - usuário sem conta associada                 → 403
+      - falta engagement_id                         → 400
+      - engagement não existe OU é de outro tenant  → 404
       - engagement não está 'authorized'            → 403
       - não há alvo nem escopo                       → 400
       - alvo fora do escopo autorizado              → 403
 
     Se `target` vier vazio, assume a primeira faixa do escopo do engagement.
     """
+    if account_id is None:
+        raise ScopeError(
+            "Usuário sem conta associada não pode disparar varreduras.", 403
+        )
     if not engagement_id:
         raise ScopeError(
             "engagement_id é obrigatório: toda varredura exige um contrato autorizado.",
             400,
         )
 
-    eng = db.get_engagement(int(engagement_id))
+    eng = db.get_engagement(int(engagement_id), account_id=account_id)
     if not eng:
         raise ScopeError("Engagement não encontrado.", 404)
     if eng.get("status") != "authorized":

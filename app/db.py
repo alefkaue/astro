@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS engagements (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id     INTEGER REFERENCES accounts(id),  -- tenant dono (isolamento multiempresa)
     name           TEXT NOT NULL,
     client         TEXT,
     scope          TEXT NOT NULL DEFAULT '[]',   -- JSON: lista de CIDRs/IPs autorizados
@@ -71,6 +72,7 @@ CREATE TABLE IF NOT EXISTS engagements (
 
 CREATE TABLE IF NOT EXISTS scans (
     id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id     INTEGER REFERENCES accounts(id),  -- tenant dono (isolamento multiempresa)
     engagement_id  INTEGER REFERENCES engagements(id),
     target         TEXT NOT NULL,
     status         TEXT NOT NULL DEFAULT 'running', -- running|done|error
@@ -164,14 +166,37 @@ def _migrate(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE scans ADD COLUMN {col} {ddl}")
             logger.info("[db] migração: scans.%s adicionada", col)
 
+    # ── Isolamento multiempresa (SEC-002): account_id em engagements e scans ──
+    # Colunas nullable + backfill a partir do criador (user.account_id). Registros
+    # cujo criador não tem conta ficam NULL (órfãos) e nunca casam com um tenant
+    # real nas queries filtradas — isolamento fail-safe, sem inferência silenciosa.
+    for table in ("engagements", "scans"):
+        if not _column_exists(conn, table, "account_id"):
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN account_id INTEGER REFERENCES accounts(id)")
+            conn.execute(
+                f"UPDATE {table} SET account_id = ("
+                f"  SELECT u.account_id FROM users u WHERE u.id = {table}.created_by"
+                f") WHERE account_id IS NULL"
+            )
+            logger.info("[db] migração: %s.account_id adicionada e backfilled", table)
+
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_engagements_account ON engagements(account_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_scans_account ON scans(account_id)")
+
 
 def init_db() -> None:
-    """Cria o schema, migra colunas novas e semeia os usuários padrão (idempotente)."""
+    """Cria o schema, migra colunas novas e (só fora de produção) semeia demo.
+
+    Fail-closed: em produção/staging NÃO semeia contas/credenciais de demonstração.
+    Um boot produtivo começa sem usuários — o admin real é provisionado à parte."""
     with _LOCK, get_conn() as conn:
         conn.executescript(SCHEMA)
         _migrate(conn)
         conn.commit()
-    _seed_users()
+    if config.seeding_allowed():
+        _seed_users()
+    else:
+        logger.info("[db] ENV=%s: seed de demonstração desativado (fail-closed).", config.ENV)
 
 
 def _seed_users() -> None:
@@ -340,44 +365,51 @@ def plan_key_for_user(user_id: int) -> str:
 
 # ─── ENGAGEMENTS ────────────────────────────────────────────────────────────────
 
-def create_engagement(name: str, client: str, scope: List[str], created_by: Optional[int]) -> int:
+def create_engagement(name: str, client: str, scope: List[str], created_by: Optional[int],
+                       account_id: Optional[int] = None) -> int:
     with _LOCK, get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO engagements (name, client, scope, status, created_by, created_at) "
-            "VALUES (?,?,?, 'draft', ?, ?)",
-            (name, client, json.dumps(scope), created_by, _now()),
+            "INSERT INTO engagements (account_id, name, client, scope, status, created_by, created_at) "
+            "VALUES (?,?,?,?, 'draft', ?, ?)",
+            (account_id, name, client, json.dumps(scope), created_by, _now()),
         )
         conn.commit()
         return cur.lastrowid
 
 
-def list_engagements(limit: int = 100) -> List[Dict]:
-    with get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM engagements ORDER BY id DESC LIMIT ?", (limit,)
-        ).fetchall()
-    out = []
-    for r in rows:
-        d = dict(r)
-        try:
-            d["scope"] = json.loads(d.get("scope") or "[]")
-        except (TypeError, json.JSONDecodeError):
-            d["scope"] = []
-        out.append(d)
-    return out
-
-
-def get_engagement(engagement_id: int) -> Optional[Dict]:
-    with get_conn() as conn:
-        r = conn.execute("SELECT * FROM engagements WHERE id=?", (engagement_id,)).fetchone()
-    if not r:
-        return None
+def _row_to_engagement(r: sqlite3.Row) -> Dict:
     d = dict(r)
     try:
         d["scope"] = json.loads(d.get("scope") or "[]")
     except (TypeError, json.JSONDecodeError):
         d["scope"] = []
     return d
+
+
+def list_engagements(account_id: Optional[int], limit: int = 100) -> List[Dict]:
+    """Engagements do tenant. `account_id=None` (usuário sem conta) → lista vazia."""
+    if account_id is None:
+        return []
+    with get_conn() as conn:
+        rows = conn.execute(
+            "SELECT * FROM engagements WHERE account_id=? ORDER BY id DESC LIMIT ?",
+            (account_id, limit),
+        ).fetchall()
+    return [_row_to_engagement(r) for r in rows]
+
+
+def get_engagement(engagement_id: int, account_id: Optional[int] = None) -> Optional[Dict]:
+    """Devolve o engagement. Se `account_id` for informado, só devolve se pertencer
+    a esse tenant (caso contrário None → a rota responde 404, sem revelar existência)."""
+    with get_conn() as conn:
+        if account_id is None:
+            r = conn.execute("SELECT * FROM engagements WHERE id=?", (engagement_id,)).fetchone()
+        else:
+            r = conn.execute(
+                "SELECT * FROM engagements WHERE id=? AND account_id IS ?",
+                (engagement_id, account_id),
+            ).fetchone()
+    return _row_to_engagement(r) if r else None
 
 
 def authorize_engagement(engagement_id: int, authorized_by: int) -> None:
@@ -391,12 +423,13 @@ def authorize_engagement(engagement_id: int, authorized_by: int) -> None:
 
 # ─── SCANS / FINDINGS ───────────────────────────────────────────────────────────
 
-def create_scan(target: str, created_by: Optional[int], engagement_id: Optional[int] = None) -> int:
+def create_scan(target: str, created_by: Optional[int], engagement_id: Optional[int] = None,
+                account_id: Optional[int] = None) -> int:
     with _LOCK, get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO scans (engagement_id, target, status, created_by, started_at) "
-            "VALUES (?,?, 'running', ?, ?)",
-            (engagement_id, target, created_by, _now()),
+            "INSERT INTO scans (account_id, engagement_id, target, status, created_by, started_at) "
+            "VALUES (?,?,?, 'running', ?, ?)",
+            (account_id, engagement_id, target, created_by, _now()),
         )
         conn.commit()
         return cur.lastrowid
@@ -423,26 +456,45 @@ def finish_scan(scan_id: int, findings: List[Dict[str, Any]], risk_score: int, s
         conn.commit()
 
 
-def list_scans(limit: int = 50, created_by: Optional[int] = None) -> List[Dict]:
-    q = "SELECT * FROM scans"
-    params: list = []
-    if created_by is not None:
-        q += " WHERE created_by=?"
-        params.append(created_by)
-    q += " ORDER BY id DESC LIMIT ?"
-    params.append(limit)
+def list_scans(limit: int = 50, account_id: Optional[int] = None) -> List[Dict]:
+    """Scans do tenant. `account_id=None` (sem conta) → lista vazia (fail-safe)."""
+    if account_id is None:
+        return []
     with get_conn() as conn:
-        return [dict(r) for r in conn.execute(q, params).fetchall()]
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM scans WHERE account_id=? ORDER BY id DESC LIMIT ?",
+            (account_id, limit),
+        ).fetchall()]
 
 
-def get_scan(scan_id: int) -> Optional[Dict]:
+def get_scan(scan_id: int, account_id: Optional[int] = None) -> Optional[Dict]:
+    """Scan por id. Com `account_id`, só devolve se pertencer ao tenant (senão None)."""
     with get_conn() as conn:
-        r = conn.execute("SELECT * FROM scans WHERE id=?", (scan_id,)).fetchone()
+        if account_id is None:
+            r = conn.execute("SELECT * FROM scans WHERE id=?", (scan_id,)).fetchone()
+        else:
+            r = conn.execute(
+                "SELECT * FROM scans WHERE id=? AND account_id=?", (scan_id, account_id)
+            ).fetchone()
     return dict(r) if r else None
 
 
-def get_scan_findings(scan_id: int) -> List[Dict]:
+def get_scan_findings(scan_id: int, account_id: Optional[int] = None) -> Optional[List[Dict]]:
+    """Achados de um scan, mas só se o scan pertencer ao tenant.
+
+    Retorna `None` quando o scan não existe ou não é do tenant (a rota responde 404);
+    lista (possivelmente vazia) quando autorizado. Com `account_id=None` não filtra
+    (uso interno/staff) — rotas de cliente SEMPRE passam o account_id.
+    """
     with get_conn() as conn:
+        if account_id is None:
+            owns = conn.execute("SELECT 1 FROM scans WHERE id=?", (scan_id,)).fetchone()
+        else:
+            owns = conn.execute(
+                "SELECT 1 FROM scans WHERE id=? AND account_id=?", (scan_id, account_id)
+            ).fetchone()
+        if not owns:
+            return None
         rows = conn.execute(
             "SELECT raw FROM findings WHERE scan_id=? ORDER BY cvss DESC", (scan_id,)
         ).fetchall()
@@ -471,23 +523,24 @@ def get_scan_findings_with_ids(scan_id: int) -> List[Dict]:
 # ─── ORÇAMENTO / EMBARGO FINANCEIRO (decisões do dono) ─────────────────────────────
 
 def latest_account_scan(account_id: int) -> Optional[Dict]:
-    """Scan concluído mais recente de qualquer usuário da conta (para o painel do dono)."""
+    """Scan concluído mais recente da conta (para o painel do dono).
+
+    Usa o `account_id` próprio do scan (tenant dono), não a conta atual do criador."""
     with get_conn() as conn:
         r = conn.execute(
-            "SELECT s.* FROM scans s JOIN users u ON u.id = s.created_by "
-            "WHERE u.account_id=? AND s.status='done' ORDER BY s.id DESC LIMIT 1",
+            "SELECT * FROM scans WHERE account_id=? AND status='done' "
+            "ORDER BY id DESC LIMIT 1",
             (account_id,),
         ).fetchone()
     return dict(r) if r else None
 
 
 def finding_account_id(finding_id: int) -> Optional[int]:
-    """Conta dona de um finding (via scan → usuário que o criou). None se órfão."""
+    """Conta dona de um finding (via scan.account_id). None se órfão/inexistente."""
     with get_conn() as conn:
         r = conn.execute(
-            "SELECT u.account_id AS aid FROM findings f "
-            "JOIN scans s ON s.id = f.scan_id "
-            "JOIN users u ON u.id = s.created_by WHERE f.id=?",
+            "SELECT s.account_id AS aid FROM findings f "
+            "JOIN scans s ON s.id = f.scan_id WHERE f.id=?",
             (finding_id,),
         ).fetchone()
     return r["aid"] if r else None
@@ -522,13 +575,18 @@ def budget_decisions_for_account(account_id: int) -> Dict[int, Dict]:
 
 # ─── QUOTA (limite de scans por plano) ────────────────────────────────────────────
 
-def count_scans_this_month(user_id: int) -> int:
-    """Quantos scans o usuário iniciou no mês corrente (UTC) — base da quota."""
+def count_scans_this_month(account_id: Optional[int]) -> int:
+    """Scans iniciados pela CONTA no mês corrente (UTC) — base da quota.
+
+    A quota é do plano, que pertence à conta; contar por conta impede contornar o
+    limite criando vários usuários. Sem conta → 0 (o enforcement barra à parte)."""
+    if account_id is None:
+        return 0
     ym = datetime.now(timezone.utc).strftime("%Y-%m")
     with get_conn() as conn:
         row = conn.execute(
-            "SELECT COUNT(*) AS n FROM scans WHERE created_by=? AND substr(started_at,1,7)=?",
-            (user_id, ym),
+            "SELECT COUNT(*) AS n FROM scans WHERE account_id=? AND substr(started_at,1,7)=?",
+            (account_id, ym),
         ).fetchone()
     return int(row["n"]) if row else 0
 

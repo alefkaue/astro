@@ -15,6 +15,17 @@ def current_user():
     return db.get_user(uid)
 
 
+def current_account_id():
+    """account_id (tenant) do usuário logado, revalidado no banco. None se sem conta.
+
+    É a chave de isolamento multiempresa: toda query de recurso de cliente filtra
+    por este valor. Lê do banco (não da sessão) para refletir remoção/alteração."""
+    user = current_user()
+    if not user or "account_id" not in user.keys():
+        return None
+    return user["account_id"]
+
+
 def current_plan():
     """Plano EFETIVO do usuário logado = o plano da sua conta (a empresa que contrata)."""
     uid = session.get("uid")
@@ -24,8 +35,9 @@ def current_plan():
 
 
 def is_staff() -> bool:
-    """True se o usuário logado é da equipe CYMAG (entrega serviços gerenciados)."""
-    return session.get("role") in db.STAFF_ROLES
+    """True se o usuário logado é da equipe CYMAG. Revalida o papel no banco."""
+    user = current_user()
+    return bool(user) and user["role"] in db.STAFF_ROLES
 
 
 def requires_feature(feature: str):
@@ -57,7 +69,7 @@ def enforce_scan_quota(fn):
             return jsonify({"error": "Não autenticado"}), 401
         limit = current_plan().scans_per_month
         if limit is not None:
-            used = db.count_scans_this_month(uid)
+            used = db.count_scans_this_month(current_account_id())
             if used >= limit:
                 return jsonify({
                     "error": f"Limite de {limit} scan(s)/mês do seu plano atingido.",
@@ -80,9 +92,12 @@ def role_required(*roles):
     def decorator(fn):
         @functools.wraps(fn)
         def wrapper(*args, **kwargs):
-            role = session.get("role")
-            if not session.get("uid"):
+            # Revalida o papel no banco (não confia só na sessão): usuário removido
+            # ou desativado, ou com papel alterado, é barrado na hora.
+            user = current_user()
+            if not user:
                 return jsonify({"error": "Não autenticado"}), 401
+            role = user["role"]
             if role not in roles and role != "admin":
                 return jsonify({"error": "Acesso negado para o seu perfil"}), 403
             return fn(*args, **kwargs)

@@ -5,6 +5,7 @@ instalado, os checks simplesmente não geram findings (degradação silenciosa).
 """
 
 import logging
+import re
 import subprocess
 from typing import Dict, List
 
@@ -35,16 +36,19 @@ class SMBCheck(ServiceCheck):
                 if name == "signing" and ("disabled" in out or "not required" in out
                                           or "message_signing: disabled" in out):
                     findings.append(make_finding(
-                        "SMB Signing Desabilitado",
-                        "Assinatura SMB desabilitada. Rede vulnerável a NTLM Relay Attack — atacante captura hashes e os retransmite.",
-                        "crit", 9.0, "CWE-300", evidence=r.stdout[:400], banner=banner,
+                        "Indicio de assinatura SMB nao obrigatoria",
+                        "Saida do script sugere assinatura SMB desabilitada ou nao obrigatoria. Possivel risco de relay; exploracao requer validacao.",
+                        "high", 7.5, "CWE-300", evidence=r.stdout[:400], banner=banner,
+                        verification_status="suspected", confidence="medium",
                     ))
 
-                if name == "eternalblue" and "vulnerable" in out and "ms17-010" in out:
+                if name == "eternalblue" and "ms17-010" in out and re.search(
+                        r"(?m)^\s*(?:[|+]\s*)?State:\s*VULNERABLE\s*$", r.stdout, re.IGNORECASE):
                     findings.append(make_finding(
-                        "EternalBlue (MS17-010) — Execução Remota de Código",
-                        "Host vulnerável ao EternalBlue. RCE sem autenticação. CVE crítico explorado pelo WannaCry.",
-                        "crit", 9.8, "CVE-2017-0144", evidence=r.stdout[:400], banner=banner,
+                        "Possivel vulnerabilidade SMB MS17-010",
+                        "Script reportou estado VULNERABLE para MS17-010. CVE especifica e execucao remota de codigo requerem validacao.",
+                        "high", 8.0, "CVE-2017-0144", evidence=r.stdout[:400], banner=banner,
+                        verification_status="suspected", confidence="medium",
                     ))
             except Exception as e:
                 logger.debug("[smb] %s: %s", name, e)

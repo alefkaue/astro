@@ -14,8 +14,9 @@ from flask import Blueprint, jsonify, request, session
 
 from app import db
 from app.ai.aegis import AEGIS_SECOPS, aegis, sanitize_finding
-from app.auth.decorators import (current_plan, enforce_scan_quota,
-                                 login_required, requires_feature)
+from app.auth.decorators import (current_account_id, current_plan,
+                                 enforce_scan_quota, login_required,
+                                 requires_feature)
 from app.autonomous import runner
 from app.scope import ScopeError, resolve_authorized_target
 from core.plans import FEATURE_AUTONOMOUS, FEATURE_MANAGED
@@ -56,9 +57,11 @@ def _ai_planner(findings: List[Dict]) -> Optional[Dict]:
 def start_run():
     body = request.get_json(force=True) or {}
     uid = session.get("uid")
+    account_id = current_account_id()
 
     try:
-        eng, target = resolve_authorized_target(body.get("engagement_id"), body.get("target", ""))
+        eng, target = resolve_authorized_target(
+            account_id, body.get("engagement_id"), body.get("target", ""))
     except ScopeError as e:
         db.audit(uid, "autonomous_denied", f"reason={e.message}", request.remote_addr or "")
         return jsonify({"error": e.message}), e.status
@@ -70,7 +73,8 @@ def start_run():
         }), 429
 
     scope = eng.get("scope") or []
-    scan_id = db.create_scan(target, created_by=uid, engagement_id=eng["id"])
+    scan_id = db.create_scan(target, created_by=uid, engagement_id=eng["id"],
+                             account_id=account_id)
     db.audit(uid, "autonomous_run", f"eng={eng['id']} target={target} scan={scan_id}",
              request.remote_addr or "")
 
@@ -91,5 +95,8 @@ def run_status(run_id: str):
     since = request.args.get("since", 0, type=int)
     r = runner.get_run(run_id, since=since)
     if r is None:
+        return jsonify({"error": "Run não encontrado."}), 404
+    # Isolamento: o run só é visível se o scan vinculado pertencer ao tenant.
+    if db.get_scan(r.get("scan_id"), account_id=current_account_id()) is None:
         return jsonify({"error": "Run não encontrado."}), 404
     return jsonify(r)

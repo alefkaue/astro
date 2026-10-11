@@ -44,9 +44,10 @@ class HTTPCheck(ServiceCheck):
         if any(kw in body for kw in ["sql", "syntax error", "mysql", "ora-",
                                      "pg_", "sqlite", "odbc", "unclosed quotation"]):
             return [make_finding(
-                "SQL Injection Confirmado",
-                f"Endpoint '{used_path}' retornou erro SQL. Dados do banco potencialmente expostos.",
-                "crit", 9.8, "CWE-89", evidence=resp.text[:300], banner=banner,
+                "Possivel SQL Injection - indicio em resposta HTTP",
+                f"Endpoint {used_path!r} retornou texto relacionado a SQL. SQLi exploravel requer validacao.",
+                "med", 5.0, "CWE-89", evidence=resp.text[:300], banner=banner,
+                verification_status="suspected", confidence="low",
             )]
         return []
 
@@ -57,9 +58,10 @@ class HTTPCheck(ServiceCheck):
                 r = requests.get(base + path, timeout=HTTP_TIMEOUT, verify=False)
                 if "root:" in r.text and "nologin" in r.text:
                     return [make_finding(
-                        "Path Traversal — /etc/passwd Exposto",
-                        "Leitura arbitrária de arquivos do sistema via traversal confirmada.",
-                        "crit", 9.1, "CWE-22", evidence=r.text[:200], banner=banner,
+                        "Possivel exposicao de /etc/passwd",
+                        "Resposta contem padroes de /etc/passwd. Origem e leitura arbitraria via traversal requerem validacao.",
+                        "high", 7.5, "CWE-22", evidence=r.text[:200], banner=banner,
+                        verification_status="suspected", confidence="medium",
                     )]
             except Exception:
                 pass
@@ -79,9 +81,10 @@ class HTTPCheck(ServiceCheck):
                 r = requests.get(base + path, timeout=HTTP_TIMEOUT, verify=False)
                 if r.status_code == 200 and len(r.text) > 20:
                     findings.append(make_finding(
-                        f"Arquivo Sensível Exposto: {path}",
-                        "Arquivo de configuração/backup acessível sem autenticação.",
-                        "high", 7.5, "CWE-200", evidence=r.text[:300], banner=banner,
+                        f"Possivel arquivo sensivel: {path}",
+                        "HTTP 200 no caminho de configuracao/backup. Pode ser pagina generica; exposicao requer validacao.",
+                        "low", 3.0, "CWE-200", evidence=r.text[:300], banner=banner,
+                        verification_status="observation", confidence="low",
                     ))
             except Exception:
                 pass
@@ -116,9 +119,10 @@ class HTTPCheck(ServiceCheck):
                         if any(kw in rl2 for kw in ["dashboard", "logout", "welcome",
                                                     "bienvenido", "painel", "admin"]):
                             findings.append(make_finding(
-                                f"Credenciais Padrão Ativas — {path}",
-                                f"Login com '{user}:{passwd}' bem-sucedido em {path}.",
-                                "crit", 9.8, "CWE-798",
+                                f"Possivel aceitacao de credenciais padrao - {path}",
+                                f"Resposta apos tentativa com {user}:{passwd} contem termos de painel em {path}. Sessao autenticada requer validacao.",
+                                "med", 5.0, "CWE-798",
+                                verification_status="suspected", confidence="low",
                                 evidence=f"POST {base}{path} com {user}:{passwd} → HTTP {r2.status_code}",
                                 banner=banner,
                             ))

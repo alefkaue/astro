@@ -36,6 +36,7 @@ class MQTTCheck(ServiceCheck):
             "Broker MQTT Sem Autenticação",
             data["description"], data["severity"], data["cvss"], "CWE-306",
             evidence=evidence, banner=ctx.banner, extra={"mqtt_data": data},
+            verification_status="confirmed", confidence="high",
         )]
 
 
@@ -68,7 +69,8 @@ class NodeREDCheck(ServiceCheck):
                 pass
 
         return [make_finding(
-            "Node-RED Exposto sem Autenticação",
-            f"Painel OT/IoT acessível sem senha. Endpoint '/{used.split()[0]}' respondeu 200.{extra}",
-            "crit", 9.8, "CWE-306", evidence=resp.text[:400], banner=banner,
+            "Possivel endpoint Node-RED acessivel",
+            f"Endpoint candidato Node-RED ({used}) respondeu HTTP 200.{extra} Identidade do servico e acesso sem autenticacao requerem validacao.",
+            "low", 3.0, "CWE-306", evidence=resp.text[:400], banner=banner,
+            verification_status="observation", confidence="low",
         )]

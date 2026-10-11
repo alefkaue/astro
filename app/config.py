@@ -26,13 +26,28 @@ def _bool(name: str, default: bool = False) -> bool:
 
 
 class Config:
+    # ─── Ambiente ────────────────────────────────────────────────────────────
+    # development | test | demo | staging | production. Controla fail-closed:
+    # produção/staging NÃO semeiam dados demo e EXIGEM segredos fortes.
+    ENV = os.environ.get("CYMAG_ENV", "development").strip().lower()
+
     # ─── Segurança / sessão ──────────────────────────────────────────────────
     SECRET_KEY = os.environ.get("CYMAG_SECRET_KEY", "").strip()
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-    SESSION_COOKIE_SECURE = _bool("CYMAG_COOKIE_SECURE", False)
+    # Em produção o cookie de sessão deve viajar só por HTTPS, salvo override explícito.
+    SESSION_COOKIE_SECURE = _bool("CYMAG_COOKIE_SECURE", ENV in ("production", "staging"))
     PERMANENT_SESSION_LIFETIME = int(os.environ.get("CYMAG_SESSION_HOURS", "12")) * 3600
+
+    @classmethod
+    def is_production_like(cls) -> bool:
+        return cls.ENV in ("production", "staging")
+
+    @classmethod
+    def seeding_allowed(cls) -> bool:
+        """Massa de demonstração só em ambientes não-produtivos."""
+        return cls.ENV in ("development", "test", "demo")
 
     # ─── Banco de dados ────────────────────────────────────────────────────────
     DB_PATH = os.environ.get("CYMAG_DB_PATH", "").strip() or str(INSTANCE_DIR / "cymag.db")
@@ -54,7 +69,16 @@ class Config:
 
     @classmethod
     def resolve_secret_key(cls) -> str:
-        """Devolve a SECRET_KEY, gerando e persistindo uma se necessário (dev)."""
+        """Devolve a SECRET_KEY. Em produção/staging é OBRIGATÓRIA e forte (fail-closed);
+        em dev/test/demo, gera e persiste uma automaticamente por conveniência."""
+        if cls.is_production_like():
+            if len(cls.SECRET_KEY) < 32:
+                raise RuntimeError(
+                    "CYMAG_SECRET_KEY ausente ou fraca em ambiente "
+                    f"'{cls.ENV}': defina uma chave forte (>=32 chars). "
+                    "Gere com: python -c \"import secrets; print(secrets.token_hex(32))\""
+                )
+            return cls.SECRET_KEY
         if cls.SECRET_KEY:
             return cls.SECRET_KEY
         key_file = INSTANCE_DIR / ".secret_key"

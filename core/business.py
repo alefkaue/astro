@@ -95,8 +95,18 @@ def _scale(rng: Tuple[int, int], factor: float) -> Tuple[int, int]:
     return (round(rng[0] * factor), round(rng[1] * factor))
 
 
+# Aviso obrigatório que acompanha QUALQUER valor em R$ devolvido por este módulo.
+# Os números são faixas heurísticas de ordem de grandeza para ajudar a PRIORIZAR,
+# não perda apurada nem economia assegurada.
+ESTIMATE_DISCLAIMER = (
+    "Estimativa de ordem de grandeza para priorização, não perícia contábil. "
+    "Valores são faixas hipotéticas, não perda apurada nem economia assegurada."
+)
+
+
 def loss_estimate(finding: Dict) -> Tuple[int, int]:
-    """Prejuízo estimado (min, max) em BRL se o problema NÃO for corrigido."""
+    """Faixa de prejuízo ESTIMADO (min, max) em BRL caso o problema não seja
+    corrigido. Heurística para priorização — ver `ESTIMATE_DISCLAIMER`."""
     f = _SEV_LOSS.get(finding.get("sev", "info"), 0.2)
     return _scale(_area(finding)["loss"], f)
 
@@ -140,6 +150,9 @@ def business_item(finding: Dict, finding_id: Optional[int] = None) -> Dict:
         "fix": area["fix"],
         "loss_min": loss[0], "loss_max": loss[1], "loss_label": brl_range(loss),
         "fix_cost_min": fix[0], "fix_cost_max": fix[1], "fix_cost_label": brl_range(fix),
+        # Honestidade (DET-001): todo valor em R$ é explicitamente marcado como estimativa.
+        "is_estimate": True,
+        "estimate_disclaimer": ESTIMATE_DISCLAIMER,
     }
 
 
@@ -190,6 +203,9 @@ def summarize(findings: List[Dict]) -> Dict:
         "open_fix_label": brl_range((open_fix_min, open_fix_max)),
         "authorized_budget": authorized_budget,
         "authorized_budget_label": brl_short(authorized_budget),
+        # Honestidade (DET-001): a exposição agregada é estimativa, não perda apurada.
+        "is_estimate": True,
+        "estimate_disclaimer": ESTIMATE_DISCLAIMER,
     }
 
 

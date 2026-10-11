@@ -69,6 +69,8 @@ def make_finding(
     evidence: str = "",
     banner: str = "",
     extra: Optional[Dict] = None,
+    verification_status: str = "observation",
+    confidence: str = "medium",
 ) -> Dict:
     """Cria um finding padronizado. A `category` é carimbada pelo engine."""
     f = {
@@ -79,6 +81,8 @@ def make_finding(
         "cve": cve,
         "evidence": evidence,
         "banner": banner,
+        "verification_status": verification_status,
+        "confidence": confidence,
     }
     if extra:
         f.update(extra)

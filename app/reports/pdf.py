@@ -41,9 +41,10 @@ SEV_COLOR = {"crit": C_RED, "high": C_YELLOW, "med": C_BLUE, "low": C_GREEN, "in
 class CYMAGReport(FPDF):
     """FPDF com header/footer padrão CYMAG."""
 
-    def __init__(self, target: str = ""):
+    def __init__(self, target: str = "", watermark: str = ""):
         super().__init__()
         self._target  = target
+        self._watermark = watermark  # ex.: "DADOS FICTÍCIOS — DEMONSTRAÇÃO"
         self._page_no_offset = 0
 
     def header(self):
@@ -66,6 +67,12 @@ class CYMAGReport(FPDF):
         self.ln(14)
 
     def footer(self):
+        # Selo de dados fictícios / demonstração, repetido em todas as páginas.
+        if self._watermark:
+            self.set_y(-18)
+            self.set_font("Helvetica", "B", 8)
+            self.set_text_color(*C_RED)
+            self.cell(0, 4, _safe(self._watermark, 80), align="C")
         self.set_y(-13)
         self.set_draw_color(*C_BLUE)
         self.set_line_width(0.4)
@@ -114,12 +121,22 @@ def _safe(text: str, max_len: int = 200) -> str:
 
 # ─── CAPA ─────────────────────────────────────────────────────────────────────
 
-def _build_cover(pdf: CYMAGReport, target: str, findings: list, score: int):
+def _build_cover(pdf: CYMAGReport, target: str, findings: list, score: int,
+                 provenance: str = ""):
     pdf.add_page()
 
     # Bloco escuro de fundo da capa
     pdf.set_fill_color(*C_DARK)
     pdf.rect(0, 14, 210, 55, 'F')
+
+    # Faixa de selo DEMONSTRAÇÃO (quando aplicável), bem visível no topo da capa.
+    if pdf._watermark:
+        pdf.set_fill_color(*C_RED)
+        pdf.rect(0, 14, 210, 7, 'F')
+        pdf.set_xy(0, 14.5)
+        pdf.set_text_color(*C_WHITE)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(210, 6, _safe(pdf._watermark, 90), align="C")
 
     # Título
     pdf.set_xy(10, 20)
@@ -136,8 +153,13 @@ def _build_cover(pdf: CYMAGReport, target: str, findings: list, score: int):
     pdf.set_text_color(*C_MUTED)
     pdf.set_font("Helvetica", "", 10)
     pdf.cell(0, 7, f"Gerado em: {datetime.now().strftime('%d de %B de %Y, %H:%M')}", ln=True)
+    if provenance:
+        pdf.set_x(10)
+        pdf.set_text_color(*C_MUTED)
+        pdf.set_font("Helvetica", "", 8)
+        pdf.cell(0, 6, _safe(provenance, 110), ln=True)
 
-    pdf.ln(18)
+    pdf.ln(18 if not provenance else 12)
 
     # Cards de resumo
     crits   = sum(1 for f in findings if f.get("sev") == "crit")
@@ -335,16 +357,17 @@ def _build_narrative(pdf: FPDF, narrative: dict):
 
 # ─── PONTO DE ENTRADA PÚBLICO ────────────────────────────────────────────────
 
-def build_quick_pdf(target: str, findings: list, exec_risks: list, score: int) -> bytes:
+def build_quick_pdf(target: str, findings: list, exec_risks: list, score: int,
+                    watermark: str = "", provenance: str = "") -> bytes:
     """Gera PDF rápido padrão. Retorna bytes do PDF."""
     if not FPDF_AVAILABLE:
         raise RuntimeError("fpdf2 não instalado. Execute: pip install fpdf2")
 
-    pdf = CYMAGReport(target)
+    pdf = CYMAGReport(target, watermark=watermark)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(10, 18, 10)
 
-    _build_cover(pdf, target, findings, score)
+    _build_cover(pdf, target, findings, score, provenance=provenance)
     pdf.add_page()
     _build_vulns_table(pdf, findings)
     _build_exec_table(pdf, exec_risks)
@@ -357,17 +380,19 @@ def build_detailed_pdf(
     findings: list,
     exec_risks: list,
     score: int,
-    narrative: Optional[Dict] = None
+    narrative: Optional[Dict] = None,
+    watermark: str = "",
+    provenance: str = "",
 ) -> bytes:
     """Gera PDF detalhado com narrativa do AEGIS. Retorna bytes do PDF."""
     if not FPDF_AVAILABLE:
         raise RuntimeError("fpdf2 não instalado. Execute: pip install fpdf2")
 
-    pdf = CYMAGReport(target)
+    pdf = CYMAGReport(target, watermark=watermark)
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(10, 18, 10)
 
-    _build_cover(pdf, target, findings, score)
+    _build_cover(pdf, target, findings, score, provenance=provenance)
     pdf.add_page()
 
     # Narrativa da IA vem primeiro (sumário executivo antes das tabelas técnicas)
