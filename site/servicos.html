@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Serviços — ASTRO Cyber</title>
+  <meta name="description" content="Diagnóstico de segurança e inventário de exposição para empresas. Escopo definido, entregáveis claros.">
+  <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><img src="brand/logo-white.svg" alt="ASTRO Cyber"></a>
+    <div class="nav-links">
+      <a href="servicos.html" class="active">Serviços</a>
+      <a href="como-funciona.html">Como funciona</a>
+      <a href="sobre.html">Sobre</a>
+      <a href="contato.html" class="nav-cta">Solicitar orçamento</a>
+    </div>
+    <button class="nav-menu-btn" aria-label="Menu" onclick="document.getElementById('nav-mobile').classList.toggle('open')">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect y="4" width="22" height="2" rx="1" fill="currentColor"/><rect y="10" width="22" height="2" rx="1" fill="currentColor"/><rect y="16" width="22" height="2" rx="1" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <div class="nav-mobile" id="nav-mobile">
+    <a href="servicos.html">Serviços</a>
+    <a href="como-funciona.html">Como funciona</a>
+    <a href="sobre.html">Sobre</a>
+    <a href="contato.html" style="color:#F2F2F2;font-weight:600;">Solicitar orçamento →</a>
+  </div>
+</nav>
+
+<!-- Header -->
+<section class="hero" style="padding:72px 0 60px;">
+  <div class="container">
+    <p class="hero-eyebrow">Catálogo de serviços</p>
+    <h1>O que fazemos</h1>
+    <p class="hero-sub" style="margin-bottom:0;">
+      Serviços com escopo definido, entregáveis claros e limitações honestas.
+      Não oferecemos o que ainda não conseguimos entregar com qualidade.
+    </p>
+  </div>
+</section>
+
+<!-- Active services -->
+<section>
+  <div class="container">
+    <p class="section-label">Disponível agora</p>
+    <h2>Serviços ativos</h2>
+    <p class="section-sub">Prontos para contratação mediante proposta e autorização formal.</p>
+
+    <!-- Assessment -->
+    <div id="assessment" class="service-card" style="margin-bottom:24px;">
+      <span class="service-badge badge-active">Disponível</span>
+      <h3>ASTRO Assessment</h3>
+      <p class="desc">
+        Diagnóstico completo de segurança de infraestrutura. Identificamos o que está exposto,
+        classificamos por severidade e entregamos um relatório que o dono da empresa consegue
+        usar para justificar investimento em correções.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;flex-wrap:wrap;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">O que entregamos</p>
+          <ul class="deliverables">
+            <li>Inventário de serviços expostos (portas, protocolos, versões)</li>
+            <li>Identificação de configurações de risco (autenticação fraca, serviços desnecessários)</li>
+            <li>Classificação de achados por severidade</li>
+            <li>Relatório executivo com linguagem de negócio</li>
+            <li>Relatório técnico com evidências</li>
+            <li>Reunião de apresentação dos resultados</li>
+            <li>Recomendações de correção priorizadas</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">Ideal para</p>
+          <ul class="deliverables">
+            <li>PMEs com 20–500 funcionários e alguma infraestrutura de TI</li>
+            <li>Empresas sem avaliação de segurança recente</li>
+            <li>Gestores que precisam justificar investimento em segurança</li>
+            <li>Empresas que querem saber o que está exposto antes de auditorias</li>
+          </ul>
+          <div class="not-included">
+            <p>Não inclui: pentest com exploração ativa, teste de aplicação web, engenharia social, monitoramento contínuo ou resposta a incidentes.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;padding-top:28px;border-top:1px solid var(--line);display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+        <a href="contato.html" class="btn btn-dark">Solicitar orçamento</a>
+        <a href="como-funciona.html" class="btn btn-outline">Ver como funciona</a>
+      </div>
+    </div>
+
+    <!-- Exposure -->
+    <div id="exposure" class="service-card">
+      <span class="service-badge badge-active">Disponível</span>
+      <h3>ASTRO Exposure</h3>
+      <p class="desc">
+        Inventário técnico de superfície de ataque. Identificamos quais serviços, portas
+        e sistemas estão acessíveis externamente — e o que não deveria estar.
+        Recomendado como primeiro passo antes do Assessment completo.
+      </p>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;">
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">O que entregamos</p>
+          <ul class="deliverables">
+            <li>Mapa de serviços expostos (IPs, portas, banners)</li>
+            <li>Identificação de serviços inesperados ou desnecessários</li>
+            <li>Resumo de exposição com recomendações de fechamento</li>
+            <li>Relatório técnico simples</li>
+          </ul>
+        </div>
+        <div>
+          <p style="font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:14px;">Ideal para</p>
+          <ul class="deliverables">
+            <li>Empresas que querem uma visão rápida da exposição</li>
+            <li>Prestadores de TI que querem dar diagnóstico ao cliente</li>
+            <li>Ponto de partida antes de avaliação mais completa</li>
+          </ul>
+          <div class="not-included">
+            <p>Não inclui: análise de vulnerabilidades, exploração, relatório executivo ou reunião de resultados.</p>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:32px;padding-top:28px;border-top:1px solid var(--line);display:flex;gap:12px;flex-wrap:wrap;">
+        <a href="contato.html" class="btn btn-dark">Solicitar orçamento</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Future services -->
+<section class="section-alt">
+  <div class="container">
+    <p class="section-label">Em desenvolvimento</p>
+    <h2>Próximos serviços</h2>
+    <p class="section-sub">Serviços que estamos preparando, mas que ainda não estão disponíveis para contratação.</p>
+
+    <div class="card-grid">
+      <div class="card">
+        <span class="service-badge badge-future" style="margin-bottom:12px;display:inline-block;">Em preparação</span>
+        <h3>ASTRO Pentest</h3>
+        <p>Teste de intrusão manual com exploração controlada. Exige metodologia documentada, ferramentas validadas e condições específicas de autorização. Disponível após validação dos primeiros serviços.</p>
+      </div>
+      <div class="card">
+        <span class="service-badge badge-future" style="margin-bottom:12px;display:inline-block;">Em preparação</span>
+        <h3>ASTRO Continuous</h3>
+        <p>Acompanhamento periódico de riscos, reavaliações e acompanhamento de correções. Disponível após validar operação estável dos serviços ativos.</p>
+      </div>
+      <div class="card">
+        <span class="service-badge badge-future" style="margin-bottom:12px;display:inline-block;">Em estudo</span>
+        <h3>ASTRO Fraud & Awareness</h3>
+        <p>Avaliação de processos expostos a golpes digitais e engenharia social. Requer protocolo específico de autorização e capacitação em conscientização.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section>
+  <div class="container">
+    <div class="cta-box">
+      <h2>Vamos conversar sobre sua empresa?</h2>
+      <p>Sem compromisso. Explicamos o escopo do serviço e, se fizer sentido, enviamos uma proposta.</p>
+      <a href="contato.html" class="btn btn-primary">Entrar em contato</a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <a href="index.html" class="footer-logo"><img src="brand/logo-white.svg" alt="ASTRO Cyber"></a>
+    <div class="footer-links">
+      <a href="servicos.html">Serviços</a>
+      <a href="como-funciona.html">Como funciona</a>
+      <a href="sobre.html">Sobre</a>
+      <a href="contato.html">Contato</a>
+      <a href="privacidade.html">Privacidade</a>
+    </div>
+  </div>
+  <p class="footer-copy">© 2026 ASTRO Cyber. Avaliações realizadas apenas em sistemas com autorização expressa do titular.</p>
+</footer>
+
+</body>
+</html>

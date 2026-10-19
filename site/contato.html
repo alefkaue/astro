@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contato — ASTRO Cyber</title>
+  <meta name="description" content="Entre em contato com a ASTRO Cyber para solicitar um orçamento de avaliação de segurança.">
+  <link rel="icon" href="brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo"><img src="brand/logo-white.svg" alt="ASTRO Cyber"></a>
+    <div class="nav-links">
+      <a href="servicos.html">Serviços</a>
+      <a href="como-funciona.html">Como funciona</a>
+      <a href="sobre.html">Sobre</a>
+      <a href="contato.html" class="nav-cta active" style="background:#3A3A3A!important;color:#F2F2F2!important;">Solicitar orçamento</a>
+    </div>
+    <button class="nav-menu-btn" aria-label="Menu" onclick="document.getElementById('nav-mobile').classList.toggle('open')">
+      <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect y="4" width="22" height="2" rx="1" fill="currentColor"/><rect y="10" width="22" height="2" rx="1" fill="currentColor"/><rect y="16" width="22" height="2" rx="1" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <div class="nav-mobile" id="nav-mobile">
+    <a href="servicos.html">Serviços</a>
+    <a href="como-funciona.html">Como funciona</a>
+    <a href="sobre.html">Sobre</a>
+    <a href="contato.html" style="color:#F2F2F2;font-weight:600;">Solicitar orçamento →</a>
+  </div>
+</nav>
+
+<!-- Header -->
+<section class="hero" style="padding:72px 0 60px;">
+  <div class="container">
+    <p class="hero-eyebrow">Fale conosco</p>
+    <h1>Solicitar orçamento</h1>
+    <p class="hero-sub" style="margin-bottom:0;">
+      Preencha o formulário abaixo. Respondemos em até 1 dia útil para agendar
+      uma conversa inicial — sem compromisso.
+    </p>
+  </div>
+</section>
+
+<!-- Form -->
+<section class="section-alt">
+  <div class="container" style="max-width:700px;">
+
+    <div class="notice" style="margin-bottom:40px;">
+      <p>Esta é uma mensagem direta para a equipe da ASTRO. Não há automação — alguém da equipe lerá e responderá pessoalmente.</p>
+    </div>
+
+    <!-- Replace ACTION with your Formspree endpoint before going live -->
+    <form action="https://formspree.io/f/PLACEHOLDER" method="POST" style="background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:40px;box-shadow:var(--shadow);">
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="nome">Seu nome *</label>
+          <input type="text" id="nome" name="nome" required placeholder="Nome completo">
+        </div>
+        <div class="form-group">
+          <label for="empresa">Empresa</label>
+          <input type="text" id="empresa" name="empresa" placeholder="Nome da empresa">
+        </div>
+        <div class="form-group">
+          <label for="email">E-mail *</label>
+          <input type="email" id="email" name="email" required placeholder="seu@email.com">
+        </div>
+        <div class="form-group">
+          <label for="telefone">Telefone (opcional)</label>
+          <input type="tel" id="telefone" name="telefone" placeholder="(11) 9 0000-0000">
+        </div>
+        <div class="form-group full">
+          <label for="servico">Serviço de interesse</label>
+          <select id="servico" name="servico">
+            <option value="">Não sei ainda / quero entender as opções</option>
+            <option value="assessment">ASTRO Assessment — diagnóstico de segurança</option>
+            <option value="exposure">ASTRO Exposure — inventário de exposição</option>
+            <option value="outro">Outro</option>
+          </select>
+        </div>
+        <div class="form-group full">
+          <label for="mensagem">O que você precisa? *</label>
+          <textarea id="mensagem" name="mensagem" required placeholder="Descreva brevemente o que você está buscando. Quantos servidores? Qual o tamanho da rede? Alguma preocupação específica?"></textarea>
+        </div>
+      </div>
+
+      <div style="margin-top:28px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <button type="submit" class="btn btn-dark" style="font-size:15px;">Enviar mensagem</button>
+        <p style="font-size:13px;color:var(--muted);">Respondemos em até 1 dia útil.</p>
+      </div>
+    </form>
+
+  </div>
+</section>
+
+<!-- What happens next -->
+<section>
+  <div class="container-sm">
+    <p class="section-label">O que acontece depois</p>
+    <h2>Próximos passos</h2>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div>
+          <h3>Recebemos sua mensagem</h3>
+          <p>Um membro da equipe lê e responde diretamente, geralmente no mesmo dia útil.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div>
+          <h3>Reunião de descoberta</h3>
+          <p>Agendamos uma conversa de 30 minutos para entender o que você precisa e se faz sentido avançar.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div>
+          <h3>Proposta com escopo definido</h3>
+          <p>Se fizer sentido para os dois lados, enviamos uma proposta com o que está incluído, prazo e valor — sem surpresas.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="footer-inner">
+    <a href="index.html" class="footer-logo"><img src="brand/logo-white.svg" alt="ASTRO Cyber"></a>
+    <div class="footer-links">
+      <a href="servicos.html">Serviços</a>
+      <a href="como-funciona.html">Como funciona</a>
+      <a href="sobre.html">Sobre</a>
+      <a href="contato.html">Contato</a>
+      <a href="privacidade.html">Privacidade</a>
+    </div>
+  </div>
+  <p class="footer-copy">© 2026 ASTRO Cyber. Avaliações realizadas apenas em sistemas com autorização expressa do titular.</p>
+</footer>
+
+</body>
+</html>
