@@ -1,14 +1,30 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { FinalCTA, PageHero, Reveal, SectionHead } from "@/components/site/ui";
-import { BanIcon, ChatIcon, ClockIcon, EyeIcon, LockIcon, SirenIcon, TargetIcon, UsersIcon } from "@/components/site/icons";
+import {
+  BanIcon,
+  ChatIcon,
+  ClockIcon,
+  EyeIcon,
+  LockIcon,
+  SirenIcon,
+  TargetIcon,
+  UsersIcon,
+} from "@/components/site/icons";
 
 export const Route = createFileRoute("/como-funciona")({
   head: () => ({
     meta: [
       { title: "Como funciona — Metodologia em 9 etapas | ASTRO Cyber" },
-      { name: "description", content: "Escopo definido, autorização formal, revisão manual e reunião de entrega. Veja as 9 etapas da nossa metodologia." },
+      {
+        name: "description",
+        content:
+          "Escopo definido, autorização formal, revisão manual e reunião de entrega. Veja as 9 etapas da nossa metodologia.",
+      },
       { property: "og:title", content: "Como trabalhamos | ASTRO Cyber" },
-      { property: "og:description", content: "Metodologia estruturada em 9 etapas, do primeiro contato ao acompanhamento." },
+      {
+        property: "og:description",
+        content: "Metodologia estruturada em 9 etapas, do primeiro contato ao acompanhamento.",
+      },
     ],
   }),
   component: ComoFunciona,
@@ -20,10 +36,16 @@ const steps: [string, string][] = [
   ["Proposta e escopo", "Definimos por escrito o que será avaliado — e o que não será."],
   ["Contrato e autorização", "Assinatura do contrato e das Rules of Engagement."],
   ["Execução dentro do escopo", "Testes apenas nos ativos e janelas autorizados."],
-  ["Revisão dos achados", "Cada resultado é revisado manualmente para eliminar falsos positivos."],
+  [
+    "Revisão dos achados",
+    "Cada resultado é revisado manualmente; o que não tem evidência não entra como confirmado.",
+  ],
   ["Relatório", "Relatório executivo e técnico, com severidade e prioridades."],
   ["Reunião de entrega", "Apresentamos os resultados e tiramos dúvidas pessoalmente."],
-  ["Acompanhamento (opcional)", "Apoio na interpretação durante a correção pela sua equipe."],
+  [
+    "Acompanhamento (opcional)",
+    "Uma conversa após a entrega para tirar dúvidas sobre a correção feita pela sua equipe.",
+  ],
 ];
 
 function ComoFunciona() {
@@ -38,10 +60,26 @@ function ComoFunciona() {
           <SectionHead label="Princípios" title="O que guia cada avaliação" />
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { i: TargetIcon, t: "Escopo definido primeiro", d: "Nada começa sem saber exatamente o que entra e o que fica de fora." },
-              { i: EyeIcon, t: "Revisão manual dos resultados", d: "Ferramentas ajudam; pessoas validam cada achado." },
-              { i: ChatIcon, t: "Linguagem de negócio", d: "Riscos explicados em impacto, não só em jargão." },
-              { i: UsersIcon, t: "Reunião de entrega", d: "Apresentamos o relatório pessoalmente, sem PDF solto no e-mail." },
+              {
+                i: TargetIcon,
+                t: "Escopo definido primeiro",
+                d: "Nada começa sem saber exatamente o que entra e o que fica de fora.",
+              },
+              {
+                i: EyeIcon,
+                t: "Revisão manual dos resultados",
+                d: "Ferramentas ajudam; pessoas validam cada achado.",
+              },
+              {
+                i: ChatIcon,
+                t: "Linguagem de negócio",
+                d: "Riscos explicados em impacto, não só em jargão.",
+              },
+              {
+                i: UsersIcon,
+                t: "Reunião de entrega",
+                d: "Apresentamos o relatório pessoalmente, sem PDF solto no e-mail.",
+              },
             ].map((c, i) => (
               <Reveal key={c.t} delay={i * 80}>
                 <div className="card card-hover h-full p-6">
@@ -59,11 +97,17 @@ function ComoFunciona() {
         <div className="container-x">
           <SectionHead label="Processo" title="9 etapas, do contato ao acompanhamento" />
           <ol className="relative">
-            <span className="absolute bottom-0 left-5 top-0 w-px bg-border md:left-1/2" aria-hidden />
+            <span
+              className="absolute bottom-0 left-5 top-0 w-px bg-border md:left-1/2"
+              aria-hidden
+            />
             {steps.map(([t, d], i) => {
               const right = i % 2 === 1;
               return (
-                <li key={t} className="relative mb-8 pl-16 md:grid md:grid-cols-2 md:gap-16 md:pl-0">
+                <li
+                  key={t}
+                  className="relative mb-8 pl-16 md:grid md:grid-cols-2 md:gap-16 md:pl-0"
+                >
                   <span className="absolute left-0 top-0 flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background font-mono text-sm md:left-1/2 md:-translate-x-1/2">
                     {String(i + 1).padStart(2, "0")}
                   </span>
@@ -85,10 +129,26 @@ function ComoFunciona() {
           <SectionHead label="Limites" title="O que não fazemos" />
           <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {[
-              { i: BanIcon, t: "Exploração ativa (por ora)", d: "Identificamos e classificamos; não exploramos falhas nos serviços atuais." },
-              { i: LockIcon, t: "Sistemas sem autorização", d: "Nunca testamos nada fora do escopo assinado." },
-              { i: SirenIcon, t: "Resposta a incidentes", d: "Se você está sob ataque agora, procure um time especializado em IR." },
-              { i: ClockIcon, t: "Monitoramento 24×7", d: "Nossos serviços são pontuais, com entregável definido." },
+              {
+                i: BanIcon,
+                t: "Exploração ativa (por ora)",
+                d: "Identificamos e classificamos; não exploramos falhas nos serviços atuais.",
+              },
+              {
+                i: LockIcon,
+                t: "Sistemas sem autorização",
+                d: "Nunca testamos nada fora do escopo assinado.",
+              },
+              {
+                i: SirenIcon,
+                t: "Resposta a incidentes",
+                d: "Se você está sob ataque agora, procure um time especializado em IR.",
+              },
+              {
+                i: ClockIcon,
+                t: "Monitoramento 24×7",
+                d: "Nossos serviços são pontuais, com entregável definido.",
+              },
             ].map((c, i) => (
               <Reveal key={c.t} delay={i * 80}>
                 <div className="card-ink h-full p-6">
