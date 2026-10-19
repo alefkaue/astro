@@ -1,4 +1,4 @@
-"""Login throttling regressions with an isolated database and clock."""
+"""Login throttling regressions — SQLite-backed rate-limiter (G0-S14)."""
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -10,10 +10,12 @@ from app.auth import ratelimit, routes
 
 
 @pytest.fixture(autouse=True)
-def reset_limiter():
-    ratelimit.reset()
+def isolated_db(tmp_path, monkeypatch):
+    """Each test gets its own SQLite DB so rate-limit state never bleeds between tests."""
+    monkeypatch.setattr(db.config, "DB_PATH", str(tmp_path / "rl.db"))
+    monkeypatch.setattr(db.config, "ENV", "test")
+    db.init_db()
     yield
-    ratelimit.reset()
 
 
 @pytest.fixture
@@ -113,8 +115,10 @@ def test_missing_and_existing_email_have_same_responses(login_client, monkeypatc
         missing.status_code, missing.json, missing.headers["Retry-After"])
 
 
-def test_sliding_window_discards_old_failures():
-    now = [0]
+def test_sliding_window_discards_old_failures(tmp_path, monkeypatch):
+    monkeypatch.setattr(db.config, "DB_PATH", str(tmp_path / "sw.db"))
+    db.init_db()
+    now = [0.0]
     limiter = ratelimit.LoginRateLimiter(3, 20, 60, clock=lambda: now[0])
     limiter.record_failure("email", "ip")
     now[0] = 30
@@ -127,20 +131,36 @@ def test_sliding_window_discards_old_failures():
     assert limiter.retry_after("email", "ip") == 60
 
 
-def test_memory_bound_and_expired_cleanup():
-    now = [0]
-    limiter = ratelimit.LoginRateLimiter(clock=lambda: now[0], max_keys=10)
-    for i in range(100):
-        limiter.record_failure(str(i), str(i))
-        assert len(limiter._entries) <= 10
-    assert ("email", "0") not in limiter._entries
-    now[0] = ratelimit.WINDOW_SECONDS
-    assert limiter.retry_after("99", "99") == 0
-    assert not limiter._entries
+def test_expired_window_releases_block(tmp_path, monkeypatch):
+    """After the block window expires, retry_after returns 0."""
+    monkeypatch.setattr(db.config, "DB_PATH", str(tmp_path / "exp.db"))
+    db.init_db()
+    now = [0.0]
+    limiter = ratelimit.LoginRateLimiter(3, 20, 60, clock=lambda: now[0])
+    for _ in range(3):
+        limiter.record_failure("user@x.com", "10.0.0.1")
+    assert limiter.retry_after("user@x.com", "10.0.0.1") == 60
+    now[0] = 61
+    assert limiter.retry_after("user@x.com", "10.0.0.1") == 0
 
 
-def test_concurrent_failures_are_counted():
-    limiter = ratelimit.LoginRateLimiter(5, 20, 60, clock=lambda: 0)
+def test_reset_clears_all_state(tmp_path, monkeypatch):
+    """reset() removes all rate-limit records."""
+    monkeypatch.setattr(db.config, "DB_PATH", str(tmp_path / "rst.db"))
+    db.init_db()
+    now = [0.0]
+    limiter = ratelimit.LoginRateLimiter(3, 20, 60, clock=lambda: now[0])
+    for _ in range(3):
+        limiter.record_failure("a@b.com", "1.2.3.4")
+    assert limiter.retry_after("a@b.com", "1.2.3.4") == 60
+    limiter.reset()
+    assert limiter.retry_after("a@b.com", "1.2.3.4") == 0
+
+
+def test_concurrent_failures_are_counted(tmp_path, monkeypatch):
+    monkeypatch.setattr(db.config, "DB_PATH", str(tmp_path / "con.db"))
+    db.init_db()
+    limiter = ratelimit.LoginRateLimiter(5, 20, 60, clock=lambda: 0.0)
     with ThreadPoolExecutor(max_workers=8) as pool:
         list(pool.map(lambda i: limiter.record_failure(str(i), "shared-ip"), range(40)))
     assert limiter.retry_after("fresh-email", "shared-ip") == 60

@@ -1,84 +1,64 @@
-"""Process-local login failure limits (each worker has its own state)."""
+"""Login rate-limiting backed by SQLite (G0-S14).
+
+State persists across restarts and is shared between workers.
+Each worker serialises its own writes with _RL_LOCK (db.py); SQLite
+serialises across workers via BEGIN IMMEDIATE.
+
+The injectable `clock` parameter keeps all existing time-based tests working.
+"""
 
 import math
 import os
-import threading
-import time
-from collections import OrderedDict, deque
-from dataclasses import dataclass, field
-
+import time as _time
 
 MAX_FAILS_EMAIL = max(1, int(os.getenv("CYMAG_LOGIN_MAX_FAILS_EMAIL", "5")))
 MAX_FAILS_IP = max(1, int(os.getenv("CYMAG_LOGIN_MAX_FAILS_IP", "20")))
 WINDOW_SECONDS = max(1, int(os.getenv("CYMAG_LOGIN_WINDOW_SECONDS", "900")))
 
 
-@dataclass
-class _Entry:
-    failures: deque = field(default_factory=deque)
-    blocked_until: float = 0
-
-
 class LoginRateLimiter:
     def __init__(self, max_fails_email=MAX_FAILS_EMAIL, max_fails_ip=MAX_FAILS_IP,
-                 window_seconds=WINDOW_SECONDS, clock=time.monotonic, max_keys=10000):
-        if min(max_fails_email, max_fails_ip, window_seconds, max_keys) <= 0:
+                 window_seconds=WINDOW_SECONDS, clock=_time.monotonic, **_ignored):
+        if min(max_fails_email, max_fails_ip, window_seconds) <= 0:
             raise ValueError("Login limits must be positive")
         self.max_fails_email = max_fails_email
         self.max_fails_ip = max_fails_ip
         self.window_seconds = window_seconds
         self.clock = clock
-        self.max_keys = max_keys
-        self._entries = OrderedDict()
-        self._lock = threading.Lock()
 
-    def _prune(self, now):
-        for key, entry in list(self._entries.items()):
-            while entry.failures and entry.failures[0] <= now - self.window_seconds:
-                entry.failures.popleft()
-            if entry.blocked_until <= now and not entry.failures:
-                del self._entries[key]
+    def _email_key(self, email: str) -> str:
+        return "email:" + email.strip().lower()
 
-    def retry_after(self, email, ip):
-        with self._lock:
-            now = self.clock()
-            self._prune(now)
-            remaining = max((self._entries[key].blocked_until - now
-                             for key in (("email", email.strip().lower()), ("ip", ip))
-                             if key in self._entries), default=0)
-            return max(0, math.ceil(remaining))
+    def _ip_key(self, ip: str) -> str:
+        return "ip:" + ip
 
-    def record_failure(self, email, ip):
-        with self._lock:
-            now = self.clock()
-            self._prune(now)
-            for key, limit in ((("email", email.strip().lower()), self.max_fails_email),
-                               (("ip", ip), self.max_fails_ip)):
-                entry = self._entries.get(key)
-                if entry is None:
-                    while len(self._entries) >= self.max_keys:
-                        self._entries.popitem(last=False)
-                    entry = self._entries[key] = _Entry()
-                self._entries.move_to_end(key)
-                # Requests already in flight must not extend an existing block.
-                if entry.blocked_until > now:
-                    continue
-                entry.failures.append(now)
-                if len(entry.failures) >= limit:
-                    entry.blocked_until = now + self.window_seconds
+    def retry_after(self, email: str, ip: str) -> int:
+        from app import db
+        now = self.clock()
+        keys = [self._email_key(email), self._ip_key(ip)]
+        secs = db.rl_retry_after(keys, now)
+        return max(0, math.ceil(secs))
 
-    def clear_email(self, email):
-        with self._lock:
-            self._entries.pop(("email", email.strip().lower()), None)
+    def record_failure(self, email: str, ip: str) -> None:
+        from app import db
+        now = self.clock()
+        db.rl_record_failure(self._email_key(email), self.max_fails_email,
+                             self.window_seconds, now)
+        db.rl_record_failure(self._ip_key(ip), self.max_fails_ip,
+                             self.window_seconds, now)
 
-    def reset(self):
-        with self._lock:
-            self._entries.clear()
+    def clear_email(self, email: str) -> None:
+        from app import db
+        db.rl_clear(self._email_key(email))
+
+    def reset(self) -> None:
+        from app import db
+        db.rl_reset()
 
 
 limiter = LoginRateLimiter()
 
 
-def reset():
-    """Clear the shared limiter between tests."""
+def reset() -> None:
+    """Clear all rate-limit state (tests and maintenance)."""
     limiter.reset()

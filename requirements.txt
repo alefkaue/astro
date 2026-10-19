@@ -5,6 +5,8 @@ groq>=0.11
 requests>=2.31
 fpdf2>=2.7
 python-dotenv>=1.0
+cryptography>=41         # cifrar chave IA em repouso (A11)
+waitress>=3.0            # servidor WSGI produção Windows (substitui Flask dev server — G0-T03)
 
 # Recomendadas (recursos extras; há fallback quando ausentes)
 psutil>=5.9          # auto-descoberta de rede portável

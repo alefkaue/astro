@@ -14,7 +14,7 @@ Fonte dos achados: `docs/audit/2026-10-baseline.md`. OWASP ASVS v5 / API Top 10 
 | A8 | Relatório de payload do cliente | ASVS V5 | DONE | SEC-006 (scan_id + selo DEMO) |
 | A9 | X-Forwarded-For confiável | ASVS V1 | todo | hardening |
 | A10 | role só da sessão | ASVS V3 | DONE | SEC-003 (current_user) |
-| A11 | Chave IA em texto puro | ASVS V6 | todo | P1 secret mgr |
+| A11 | Chave IA em texto puro | ASVS V6 | DONE | Fernet(PBKDF2-HMAC-SHA256 do SECRET_KEY); api_key_enc no JSON; legado lido sem cifrar; 4 testes |
 | A12 | Quota por usuário, não conta | lógica | DONE | SEC-003 (por conta) |
 
 Cada correção exige teste de regressão antes de marcar `done`.

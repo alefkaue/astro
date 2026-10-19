@@ -150,3 +150,30 @@ def test_http_unauthenticated_denied(tenants):
     app, a, _ = tenants
     with app.test_client() as c:
         assert c.get(f"/api/scans/{a['scan']}/findings").status_code == 401
+
+
+# ─── AI-001: get_finding_by_id com isolamento tenant ────────────────────────
+
+def test_db_get_finding_by_id_cross_tenant_blocked(tenants):
+    """Tenant A não pode obter findings de B pelo id (protege AI-001 / prompt injection cross-tenant)."""
+    _, a, b = tenants
+    # Obter um finding_id de B
+    b_findings = db.get_scan_findings_with_ids(b["scan"])
+    assert b_findings, "fixture deve ter ao menos 1 finding"
+    b_fid = b_findings[0]["finding_id"]
+    # A não deve conseguir ler com seu account_id
+    assert db.get_finding_by_id(b_fid, a["acc"]) is None
+    # B consegue ler o próprio
+    assert db.get_finding_by_id(b_fid, b["acc"]) is not None
+
+
+def test_db_get_finding_by_id_own_tenant_ok(tenants):
+    """Tenant pode obter finding pelo id se o scan pertence a ele."""
+    _, a, b = tenants
+    a_findings = db.get_scan_findings_with_ids(a["scan"])
+    assert a_findings
+    fid = a_findings[0]["finding_id"]
+    f = db.get_finding_by_id(fid, a["acc"])
+    assert f is not None
+    assert f["finding_id"] == fid
+    assert f["host"] == "192.0.2.10"

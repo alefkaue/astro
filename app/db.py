@@ -15,6 +15,7 @@ import json
 import logging
 import sqlite3
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -25,6 +26,7 @@ from app.config import config
 logger = logging.getLogger("cymag.db")
 
 _LOCK = threading.Lock()
+_RL_LOCK = threading.Lock()  # serializa writes de rate-limit dentro do processo
 
 # Papéis DENTRO do cliente (PME): owner (dono, contrata/gerencia), operator
 # (profissional interno que usa a plataforma), viewer (só relatórios executivos).
@@ -131,6 +133,14 @@ CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);
 CREATE INDEX IF NOT EXISTS idx_scans_engagement ON scans(engagement_id);
 CREATE INDEX IF NOT EXISTS idx_users_account ON users(account_id);
 CREATE INDEX IF NOT EXISTS idx_budget_account ON budget_decisions(account_id);
+
+-- Rate-limit de login compartilhado entre workers (G0-S14).
+-- key = "email:<email>" ou "ip:<ip>"; ts_json guarda os timestamps da janela deslizante.
+CREATE TABLE IF NOT EXISTS login_attempts (
+    key           TEXT PRIMARY KEY,
+    ts_json       TEXT NOT NULL DEFAULT '[]',  -- JSON list de timestamps de falha na janela
+    blocked_until REAL NOT NULL DEFAULT 0
+);
 """
 
 
@@ -529,6 +539,30 @@ def get_scan_findings_with_ids(scan_id: int) -> List[Dict]:
     return out
 
 
+def get_finding_by_id(finding_id: int, account_id: int) -> Optional[Dict]:
+    """Retorna um finding pelo seu id verificando que pertence ao tenant.
+
+    Usa JOIN com scans para garantir isolamento: um tenant só vê seus próprios
+    achados, mesmo conhecendo IDs de outros tenants (previne IDOR/AI-001).
+    Devolve None se o finding não existir ou não pertencer ao tenant.
+    """
+    with get_conn() as conn:
+        r = conn.execute(
+            """
+            SELECT f.id, f.raw
+              FROM findings f
+              JOIN scans s ON s.id = f.scan_id
+             WHERE f.id = ? AND s.account_id = ?
+            """,
+            (finding_id, account_id),
+        ).fetchone()
+    if not r or not r["raw"]:
+        return None
+    finding = json.loads(r["raw"])
+    finding["finding_id"] = r["id"]
+    return finding
+
+
 # ─── ORÇAMENTO / EMBARGO FINANCEIRO (decisões do dono) ─────────────────────────────
 
 def latest_account_scan(account_id: int) -> Optional[Dict]:
@@ -643,6 +677,94 @@ def list_review_queue(limit: int = 50, account_id: Optional[int] = None) -> List
             (account_id, limit),
         ).fetchall()
     return [dict(r) for r in rows]
+
+
+# ─── RATE-LIMIT DE LOGIN (compartilhado entre workers — G0-S14) ───────────────────
+#
+# Usa BEGIN IMMEDIATE para read-modify-write atômico em ambientes multi-worker.
+# _RL_LOCK serializa dentro do processo; SQLite serializa entre processos.
+
+def _rl_conn() -> sqlite3.Connection:
+    """Conexão em modo autocommit para transações explícitas de rate-limit."""
+    conn = sqlite3.connect(config.DB_PATH, timeout=15, isolation_level=None)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
+    return conn
+
+
+def rl_retry_after(keys: List[str], now: float) -> float:
+    """Segundos restantes de bloqueio para qualquer das chaves; 0 se livre."""
+    if not keys:
+        return 0.0
+    ph = ",".join("?" * len(keys))
+    with get_conn() as conn:
+        rows = conn.execute(
+            f"SELECT blocked_until FROM login_attempts WHERE key IN ({ph}) AND blocked_until > ?",
+            (*keys, now),
+        ).fetchall()
+    if not rows:
+        return 0.0
+    return max(0.0, max(r["blocked_until"] for r in rows) - now)
+
+
+def rl_record_failure(key: str, limit: int, window_seconds: int, now: float) -> None:
+    """Registra uma falha com janela deslizante e bloqueia se o limite for atingido.
+
+    Janela deslizante: timestamps mais antigos que (now - window_seconds) são
+    descartados antes de contar, igual ao comportamento original em memória.
+    BEGIN IMMEDIATE garante atomicidade entre workers (G0-S14).
+    """
+    with _RL_LOCK:
+        conn = _rl_conn()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            r = conn.execute(
+                "SELECT ts_json, blocked_until FROM login_attempts WHERE key=?", (key,)
+            ).fetchone()
+            if r:
+                timestamps = json.loads(r["ts_json"] or "[]")
+                blocked_until = r["blocked_until"]
+            else:
+                timestamps, blocked_until = [], 0.0
+            # Não estende um bloqueio já ativo (in-flight requests)
+            if blocked_until > now:
+                conn.execute("COMMIT")
+                return
+            # Janela deslizante: descarta falhas fora da janela
+            cutoff = now - window_seconds
+            timestamps = [t for t in timestamps if t > cutoff]
+            timestamps.append(now)
+            timestamps = timestamps[-limit:]  # limite de memória: guarda só os últimos `limit`
+            new_blocked = (now + window_seconds) if len(timestamps) >= limit else blocked_until
+            conn.execute(
+                "INSERT OR REPLACE INTO login_attempts (key, ts_json, blocked_until) "
+                "VALUES (?, ?, ?)",
+                (key, json.dumps(timestamps), new_blocked),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except Exception:
+                pass
+            raise
+        finally:
+            conn.close()
+
+
+def rl_clear(key: str) -> None:
+    """Remove o registro de tentativas para uma chave (ex: após login bem-sucedido)."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM login_attempts WHERE key=?", (key,))
+        conn.commit()
+
+
+def rl_reset() -> None:
+    """Apaga todos os registros de tentativas (testes e manutenção)."""
+    with get_conn() as conn:
+        conn.execute("DELETE FROM login_attempts")
+        conn.commit()
 
 
 # ─── AUDIT ───────────────────────────────────────────────────────────────────────

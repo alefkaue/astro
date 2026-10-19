@@ -45,7 +45,7 @@ Codex é coordenador/integrador e dono do frontend. Claude foi acionado para AUT
 | SCAN-008 | P0 / 3 | Codex | done parcial | Despacho somente inventário TCP, 64 candidatos; sem checks intrusivos; cobertura/timeout parcial pendentes |
 | DASH-001 | P1 / 1–3 | Codex | done | Dashboard da persistência por tenant, demo separada, estado vazio/erro, limites explícitos |
 | UI-002 | P1 / 3 | Codex | done | Classificação/evidência, análise do histórico correta, scan_id autônomo usado no PDF |
-| SEC-009 | P0 / 2 | Claude (CSRF) + Codex (rate-limit) | parcial | **feito 2026-10-11:** CSRF (origem+formato) e rate-limit/bloqueio de login. Pendente: segredo IA cifrado, suporte/admin auditado, matriz RBAC completa |
+| SEC-009 | P0 / 2 | Claude (CSRF) + Codex (rate-limit) | parcial | **feito 2026-10-11:** CSRF + rate-limit. **feito 2026-10-18:** segredo IA cifrado (A11, Fernet). Pendente: admin auditado completo, matriz RBAC completa |
 | SCOPE-010 | P0 / 2–3 | Backend | todo | Propriedade, RoE temporal, bloqueio OT/metadados/link-local, budgets globais e egress |
 | JOB-001 | P1 / 2–3 | Backend | todo | Fila durável, cancelamento real, sequência de eventos, recovery/retries; depende schema |
 | DATA-001 | P1 / 2–3 | Backend | todo | Ativos, evidências, detector/método/versionamento, finding_id estável; depois PostgreSQL |

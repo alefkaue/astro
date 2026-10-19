@@ -49,7 +49,8 @@ def create_app() -> Flask:
     db.init_db()
 
     from app.ai.aegis import aegis
-    aegis.init(config.GROQ_API_KEY, config.AEGIS_MODEL, config.AI_CONFIG_PATH)
+    aegis.init(config.GROQ_API_KEY, config.AEGIS_MODEL, config.AI_CONFIG_PATH,
+               secret_key=app.config["SECRET_KEY"])
 
     # ── Blueprints (importados aqui para evitar imports circulares) ───────────
     from app.admin import admin_bp

@@ -109,11 +109,30 @@ def api_scan():
 @login_required
 @requires_feature(FEATURE_AI)
 def api_remediation():
-    """AEGIS analisa UMA vulnerabilidade. Persona: 'secops' (técnico) ou 'exec'."""
+    """AEGIS analisa UMA vulnerabilidade. Persona: 'secops' (técnico) ou 'exec'.
+
+    Caminho preferencial (AI-001): forneça `finding_id` para que o achado seja
+    carregado diretamente do banco com isolamento de tenant, eliminando a
+    dependência de conteúdo enviado pelo cliente.
+
+    Caminho legado: forneça `vuln` (dict). Ainda suportado, mas o conteúdo passa
+    por `sanitize_finding` antes de entrar em qualquer prompt.
+    """
     body = request.get_json(force=True) or {}
-    # Campos derivados do alvo são sanitizados antes de entrar em qualquer prompt.
-    vuln = sanitize_finding(body.get("vuln", {}))
+    account_id = current_account_id()
     persona = body.get("persona", "secops")
+
+    finding_id = body.get("finding_id")
+    if finding_id:
+        # Caminho seguro: carrega do banco com verificação de tenant
+        loaded = db.get_finding_by_id(int(finding_id), account_id)
+        if not loaded:
+            return jsonify({"error": "Achado não encontrado."}), 404
+        vuln = sanitize_finding(loaded)
+    else:
+        # Caminho legado: cliente envia o dict; sanitizar antes de usar
+        vuln = sanitize_finding(body.get("vuln", {}))
+
     all_vulns = body.get("all_findings", [])
 
     logger.info("[/api/remediation] %s | persona=%s", vuln.get("title"), persona)

@@ -149,6 +149,9 @@ class Aegis:
       1. `GROQ_API_KEY` no ambiente/.env  → fonte "env";
       2. configuração salva pelo admin no painel (instance/ai_config.json) → "runtime";
       3. nenhuma → AEGIS offline (fallbacks determinísticos).
+
+    Quando `secret_key` é fornecido no `init()`, a chave IA é cifrada com Fernet
+    (AES-128-CBC + HMAC-SHA256) antes de ser persistida — corrige A11.
     """
 
     def __init__(self):
@@ -158,6 +161,7 @@ class Aegis:
         self._source = "none"       # none | env | runtime
         self._key_mask = ""
         self._config_path: Optional[Path] = None
+        self._fernet = None         # Fernet para cifrar/decifrar chave em repouso
 
     @staticmethod
     def _make_client(api_key: str, base_url: Optional[str] = None):
@@ -167,12 +171,64 @@ class Aegis:
             kwargs["base_url"] = base_url
         return Groq(**kwargs)
 
-    def init(self, api_key: str, model: str, config_path: Optional[str] = None) -> None:
+    def _init_encryption(self, secret_key: str) -> None:
+        """Deriva uma chave Fernet do SECRET_KEY da aplicação (A11).
+
+        Usa PBKDF2-HMAC-SHA256 com salt fixo por aplicação para separar
+        a chave de cifração da chave de sessão Flask — mesmo segredo, uso distinto.
+        Falha silenciosamente se `cryptography` não estiver instalado.
+        """
+        if not secret_key:
+            return
+        try:
+            import base64
+            import hashlib
+            from cryptography.fernet import Fernet
+            raw = hashlib.pbkdf2_hmac(
+                "sha256",
+                secret_key.encode("utf-8"),
+                b"cymag_aegis_v1",
+                iterations=100_000,
+                dklen=32,
+            )
+            self._fernet = Fernet(base64.urlsafe_b64encode(raw))
+        except ImportError:
+            logger.warning("[AEGIS] cryptography não instalado; chave persistida sem cifrar (A11).")
+        except Exception as exc:
+            logger.warning("[AEGIS] Falha ao inicializar criptografia: %s", exc)
+
+    def _encrypt_api_key(self, key: str) -> Optional[str]:
+        """Cifra a chave de API para armazenamento. Retorna None se Fernet indisponível."""
+        if not self._fernet or not key:
+            return None
+        try:
+            return self._fernet.encrypt(key.encode("utf-8")).decode("ascii")
+        except Exception as exc:
+            logger.warning("[AEGIS] Falha ao cifrar chave: %s", exc)
+            return None
+
+    def _decrypt_api_key(self, enc: str) -> Optional[str]:
+        """Decifra uma chave armazenada. Retorna None se Fernet indisponível ou dado corrompido."""
+        if not self._fernet or not enc:
+            return None
+        try:
+            return self._fernet.decrypt(enc.encode("ascii")).decode("utf-8")
+        except Exception as exc:
+            logger.warning("[AEGIS] Falha ao decifrar chave (SECRET_KEY mudou?): %s", exc)
+            return None
+
+    def init(self, api_key: str, model: str, config_path: Optional[str] = None,
+             secret_key: str = "") -> None:
         """Inicializa o singleton no boot. Env tem prioridade; senão, usa a
-        configuração que o admin salvou pelo painel."""
+        configuração que o admin salvou pelo painel.
+
+        `secret_key` deve ser o SECRET_KEY da aplicação Flask — usado para
+        derivar a chave Fernet que protege a chave IA em repouso (A11).
+        """
         self._model = (model or self._model)
         self._base_url = GROQ_BASE_URL
         self._config_path = Path(config_path) if config_path else None
+        self._init_encryption(secret_key)
 
         if api_key:
             self._apply(api_key, self._model, self._base_url, source="env")
@@ -205,8 +261,20 @@ class Aegis:
         if not self._config_path:
             return None
         try:
-            if self._config_path.exists():
-                return json.loads(self._config_path.read_text(encoding="utf-8"))
+            if not self._config_path.exists():
+                return None
+            data = json.loads(self._config_path.read_text(encoding="utf-8"))
+            if "api_key_enc" in data:
+                # Formato novo: decifrar antes de devolver
+                decrypted = self._decrypt_api_key(data["api_key_enc"])
+                if not decrypted:
+                    logger.warning("[AEGIS] Não foi possível decifrar a chave salva (SECRET_KEY mudou?).")
+                    return None
+                data = dict(data)
+                data["api_key"] = decrypted
+                del data["api_key_enc"]
+            # Formato legado (api_key em texto puro) → devolve como está
+            return data
         except Exception as e:
             logger.warning("[AEGIS] Falha ao ler config persistida: %s", e)
         return None
@@ -215,8 +283,16 @@ class Aegis:
         if not self._config_path:
             return
         try:
+            payload: dict = {"model": model, "base_url": base_url}
+            encrypted = self._encrypt_api_key(api_key)
+            if encrypted:
+                payload["api_key_enc"] = encrypted
+            else:
+                # Fallback: armazena em texto puro com aviso (A11 parcialmente mitigado)
+                payload["api_key"] = api_key
+                logger.warning("[AEGIS] Chave persistida sem cifrar — forneça secret_key no init() (A11).")
             self._config_path.write_text(
-                json.dumps({"api_key": api_key, "model": model, "base_url": base_url}),
+                json.dumps(payload),
                 encoding="utf-8",
             )
         except Exception as e:
