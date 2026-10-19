@@ -106,7 +106,7 @@ export function Accordion({ items }: { items: { q: string; a: string }[] }) {
               <span>{it.q}</span>
               <PlusIcon className={`shrink-0 transition-transform duration-300 ${isOpen ? "rotate-45" : ""}`} />
             </button>
-            <div className="overflow-hidden transition-[max-height] duration-500 ease-in-out" style={{ maxHeight: isOpen ? 240 : 0 }}>
+            <div className="overflow-hidden transition-[max-height] duration-500 ease-in-out" style={{ maxHeight: isOpen ? 480 : 0 }}>
               <p className="px-6 pb-6 text-muted-foreground">{it.a}</p>
             </div>
           </div>

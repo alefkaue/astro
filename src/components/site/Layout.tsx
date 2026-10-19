@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ArrowUp, MenuIcon, MoonIcon, SunIcon, XIcon } from "./icons";
 
 export function Logo() {
@@ -24,8 +24,9 @@ const links = [
 ] as const;
 
 function ThemeToggle() {
-  const [dark, setDark] = useState(false);
-  useEffect(() => setDark(document.documentElement.classList.contains("dark")), []);
+  const [dark, setDark] = useState<boolean>(
+    () => typeof document !== "undefined" && document.documentElement.classList.contains("dark"),
+  );
   const toggle = () => {
     const next = !dark;
     setDark(next);
