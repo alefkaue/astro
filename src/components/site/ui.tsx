@@ -9,7 +9,7 @@ export function Reveal({ children, className = "", delay = 0 }: { children: Reac
     if (!el) return;
     const io = new IntersectionObserver(
       ([e]) => {
-        if (e.isIntersecting) {
+        if (e?.isIntersecting) {
           el.classList.add("is-visible");
           io.disconnect();
         }
@@ -33,7 +33,7 @@ export function Counter({ to, suffix = "" }: { to: number; suffix?: string }) {
     const el = ref.current;
     if (!el) return;
     const io = new IntersectionObserver(([e]) => {
-      if (!e.isIntersecting) return;
+      if (!e?.isIntersecting) return;
       io.disconnect();
       const start = performance.now();
       const tick = (t: number) => {

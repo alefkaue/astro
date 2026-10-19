@@ -16,7 +16,7 @@ export const Route = createFileRoute("/contato")({
 });
 
 // Configure o endpoint em VITE_FORMSPREE_ENDPOINT (ex.: https://formspree.io/f/xxxxxx)
-const ENDPOINT = import.meta.env.VITE_FORMSPREE_ENDPOINT as string | undefined;
+const ENDPOINT = import.meta.env["VITE_FORMSPREE_ENDPOINT"] as string | undefined;
 
 type Errors = Partial<Record<"nome" | "email" | "mensagem", string>>;
 
@@ -30,7 +30,7 @@ function validate(fd: FormData): Errors {
   return e;
 }
 
-function Field({ id, label, error, children, required }: { id: string; label: string; error?: string; children: React.ReactNode; required?: boolean }) {
+function Field({ id, label, error, children, required }: { id: string; label: string; error?: string | undefined; children: React.ReactNode; required?: boolean }) {
   return (
     <div>
       <label htmlFor={id} className="mb-1.5 block text-sm font-medium">{label}{required ? " *" : <span className="text-muted-foreground"> (opcional)</span>}</label>
