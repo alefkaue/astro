@@ -1,5 +1,7 @@
 # ASTRO Cyber — Vitrine institucional
 
+**Área do portfólio:** [Desenvolvimento de Software](https://github.com/alefkaue#desenvolvimento-de-software) · **Contexto:** Projeto institucional em desenvolvimento
+
 Site público da ASTRO Cyber: início, serviços, metodologia, sobre, contato e política de privacidade.
 É independente da plataforma (branch `app`) — não tem login, checkout nem acesso ao SaaS.
 
